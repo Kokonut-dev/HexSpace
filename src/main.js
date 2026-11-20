@@ -1,3 +1,5 @@
+import { performanceOverlay } from "./ui/performance.js";
+import { activeFleet, fleetCapacity, hire, roster } from "./systems/fleet.js";
 import { installBloom } from "./core/lighting.js";
 import { renderDialogue } from "./ui/dialogue.js";
 import { regionalState } from "./world/universe.js";
@@ -341,20 +343,32 @@ function drawOverlay() {
         ),
       );
     }
-    row(
-      rows,
-      "Hire a wingmate",
-      "A mercenary provides fire support in combat.",
-      action(
-        d.hired ? "Hired" : "Hire · 320 CR",
-        () => {
-          d.hired = true;
-          d.credits -= 320;
-          return "Mercenary enlisted.";
-        },
-        d.hired || d.credits < 320,
-      ),
+    const capacity = fleetCapacity(d.ship);
+    para(
+      panel,
+      `Mercenaries · ${activeFleet(d).length}/${capacity} active command slots`,
     );
+    for (const [id, unit] of Object.entries(roster)) {
+      const enlisted = d.roster.includes(id);
+      row(
+        rows,
+        unit.name,
+        unit.role,
+        action(
+          enlisted ? "Dismiss" : `Hire · ${unit.cost} CR`,
+          () => {
+            if (enlisted) {
+              d.roster = d.roster.filter((item) => item !== id);
+              return `${unit.name} dismissed.`;
+            }
+            return hire(d, id)
+              ? `${unit.name} enlisted.`
+              : "No command slot or insufficient credits.";
+          },
+          !enlisted && (d.roster.length >= capacity || d.credits < unit.cost),
+        ),
+      );
+    }
   } else if (view === "hq") {
     para(panel, `${game.s.faction} reputation: ${d.rep[game.s.faction] ?? 0}.`);
     if (d.quest) {
@@ -376,8 +390,8 @@ function drawOverlay() {
 }
 let contactSignature = "";
 function hud() {
-  $("wing").hidden = !d.hired;
-  set("wing", `Wing: ${d.wingOrder}`);
+  $("wing").hidden = !d.roster.length;
+  set("wing", `Wing ${activeFleet(d).length}: ${d.wingOrder}`);
 
   const s = game.s,
     objs = game.objects.filter((o) => !o.dead);
@@ -488,10 +502,10 @@ function hud() {
   c.fillRect(98, 98, 4, 4);
 }
 function changeWingOrder() {
-  if (!d.hired) return;
+  if (!d.roster.length) return;
   const orders = ["escort", "focus", "hold"];
   d.wingOrder = orders[(orders.indexOf(d.wingOrder) + 1) % orders.length];
-  $("wing").textContent = `Wing: ${d.wingOrder}`;
+  $("wing").textContent = `Wing ${activeFleet(d).length}: ${d.wingOrder}`;
   notify(`Wingmate order: ${d.wingOrder}.`);
   save();
 }
@@ -587,6 +601,7 @@ for (const b of document.querySelectorAll("[data-key]")) {
   };
 }
 const surface = $("game");
+const sampleFrame = performanceOverlay(surface.parentElement);
 function pointer(e) {
   const r = surface.getBoundingClientRect();
   aim = {
@@ -634,6 +649,7 @@ new Phaser.Game({
       render(this, game, 0);
     },
     update(t, ms) {
+      sampleFrame(t);
       if (view === "flight")
         game.update(Math.min(config.maxFrameDelta, ms / 1000), {
           x: Number(keys.has("d")) - Number(keys.has("a")),

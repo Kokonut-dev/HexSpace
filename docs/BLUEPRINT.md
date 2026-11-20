@@ -46,15 +46,15 @@ Every six actions, contract boards rotate their destinations, quantities, and pa
 
 ### Roadmap audit
 
-| Step                     | Implemented                                                                                                                    | Remaining or not verified                                       |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
-| 1. Blueprint             | Comparative game-design analysis, state flow and data contracts                                                                | No new playtesting study                                        |
-| 2. Browser shell         | Responsive Phaser Canvas, static paths, vendored dependencies                                                                  | Device-wide performance qualification                           |
-| 3. Flight                | Inertia, assist, mouse aim, weapon heat, particles, destructible ore, enemy AI                                                 | More varied combat encounters                                   |
-| 4. Fitting               | Typed hardpoints, fitting diagram, weight/power/heat/cargo checks, hull purchases and resale                                   | More hull silhouettes and hull-specific slot layouts            |
-| 5. Stations              | Walkable room layout, seeded props, collision, terminals and NPCs                                                              | Additional station themes and dialogue arcs                     |
-| 6. Universe              | Adjacent travel, market quotes, contestable frontier control, procedural contracts and events                                  | Full independent fleet simulation is outside the current design |
-| 7. Polish and deployment | Runtime sprites, synth audio, CRT treatment, light-driven shadows, WebGL bloom with Canvas fallback, autosave, deployable root | Physical-device frame-rate benchmarks                           |
+| Step                     | Implemented                                                                                                                    | Remaining or not verified                            |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------- |
+| 1. Blueprint             | Comparative game-design analysis, state flow and data contracts                                                                | No new playtesting study                             |
+| 2. Browser shell         | Responsive Phaser Canvas, static paths, vendored dependencies                                                                  | Device-wide performance qualification                |
+| 3. Flight                | Inertia, assist, mouse aim, weapon heat, particles, destructible ore, enemy AI                                                 | More varied combat encounters                        |
+| 4. Fitting               | Typed hardpoints, fitting diagram, weight/power/heat/cargo checks, hull purchases and resale                                   | More hull silhouettes and hull-specific slot layouts |
+| 5. Stations              | Walkable room layout, seeded props, collision, terminals and NPCs                                                              | Additional station themes and dialogue arcs          |
+| 6. Universe              | Adjacent travel, market quotes, contestable frontier control, procedural contracts and events, recruitable squadron            | Squadron combat, not a strategic fleet simulator     |
+| 7. Polish and deployment | Runtime sprites, synth audio, CRT treatment, light-driven shadows, WebGL bloom with Canvas fallback, autosave, deployable root | Physical-device frame-rate benchmarks                |
 
 ### Design trade-offs and acceptance criteria
 

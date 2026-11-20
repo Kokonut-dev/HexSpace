@@ -1,3 +1,4 @@
+import { activeFleet, formation, roster } from "../systems/fleet.js";
 import { rng } from "../world/galaxy.js";
 
 const random = rng(73),
@@ -324,24 +325,23 @@ export function render(sc, a, t) {
     );
   }
   for (const b of a.bullets) {
-    g.lineStyle(2, b.enemy ? 0xff7581 : 0x8dfff5, 0.95).lineBetween(
-      X(b.x),
-      Y(b.y),
-      X(b.x - b.vx * 0.024),
-      Y(b.y - b.vy * 0.024),
-    );
+    g.lineStyle(
+      2,
+      b.enemy ? 0xff7581 : b.fleet ? 0xb7f68e : 0x8dfff5,
+      0.95,
+    ).lineBetween(X(b.x), Y(b.y), X(b.x - b.vx * 0.024), Y(b.y - b.vy * 0.024));
   }
-  if (a.d.hired && a.d.wingOrder !== "hold") {
-    const side = Math.sin(t * 0.002) * 5;
+  for (const [index, id] of activeFleet(a.d).entries()) {
+    const pos = formation(p, index);
     sprite(
       sc,
-      "wingmate",
+      `fleet-${id}`,
       "ship",
-      cx - (42 + side) * z,
-      cy + 30 * z,
-      1.35 * z,
+      X(pos.x),
+      Y(pos.y),
+      1.4 * z,
       p.angle + Math.PI / 2,
-      0xc4ffa9,
+      roster[id].color,
     );
   }
   const scale =

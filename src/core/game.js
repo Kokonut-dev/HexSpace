@@ -1,3 +1,4 @@
+import { activeFleet, formation, roster } from "../systems/fleet.js";
 import { createShipState, createPilot } from "../entities/player.js";
 import { regionalState, support, nebula } from "../world/universe.js";
 import { config } from "../config.js";
@@ -36,7 +37,7 @@ export class Game {
     this.bullets = [];
     this.particles = [];
     this.shot = 0;
-    this.enemyShot = 0;
+    this.fleetCooldown = {};
     this.lastHit = 0;
     this.trail = 0;
   }
@@ -252,7 +253,7 @@ export class Game {
       });
     }
     this.shot -= dt;
-    this.enemyShot -= dt;
+    this.updateFleet(dt);
     this.lastHit += dt;
     p.heat = clamp(
       p.heat -
@@ -288,7 +289,8 @@ export class Game {
         o.x += ((p.x - o.x) / r) * v;
         o.y += ((p.y - o.y) / r) * v;
       }
-      if (r < 235 && this.enemyShot <= 0) {
+      o.cooldown = (o.cooldown ?? 0) - dt;
+      if (r < 235 && o.cooldown <= 0) {
         const a = Math.atan2(p.y - o.y, p.x - o.x);
         this.bullets.push({
           x: o.x,
@@ -298,16 +300,7 @@ export class Game {
           life: 1.3,
           enemy: true,
         });
-        this.enemyShot = 1.65;
-        if (
-          this.d.hired &&
-          this.d.wingOrder !== "hold" &&
-          r < 190 &&
-          (this.d.wingOrder !== "focus" || this.target === o.id)
-        ) {
-          o.hp -= this.d.wingOrder === "focus" ? 15 : 9;
-          if (o.hp <= 0) this.destroy(o);
-        }
+        o.cooldown = 1.65;
       }
     }
     for (const b of this.bullets) {
@@ -329,7 +322,10 @@ export class Game {
         for (const o of this.objects) {
           if (o.dead || !o.hp || range(o, b) > (o.type === "ore" ? 22 : 15))
             continue;
-          o.hp -= this.fit.damage * (o.type === "ore" ? this.fit.mining : 1);
+          if (b.fleet && o.type !== "raider") continue;
+          o.hp -=
+            b.damage ??
+            this.fit.damage * (o.type === "ore" ? this.fit.mining : 1);
           b.life = 0;
           this.burst(b.x, b.y, 0xf2ac79, 5);
           if (o.hp <= 0) this.destroy(o);
@@ -357,6 +353,40 @@ export class Game {
       this.load();
       this.save();
       this.notify("Emergency recovery complete. Lost 25% of credits.");
+    }
+  }
+  updateFleet(dt) {
+    if (this.d.wingOrder === "hold") return;
+    for (const [index, id] of activeFleet(this.d).entries()) {
+      this.fleetCooldown[id] = (this.fleetCooldown[id] ?? 0) - dt;
+      if (this.fleetCooldown[id] > 0) continue;
+      const unit = roster[id],
+        pos = formation(this.p, index);
+      if (!unit.damage) {
+        if (this.p.shield < this.fit.shield) {
+          this.p.shield = Math.min(this.fit.shield, this.p.shield + 5);
+          this.fleetCooldown[id] = unit.period;
+        }
+        continue;
+      }
+      const candidates = this.objects.filter(
+        (o) => !o.dead && o.type === "raider" && range(o, pos) < unit.range,
+      );
+      const target =
+        this.d.wingOrder === "focus"
+          ? candidates.find((o) => o.id === this.target)
+          : candidates.sort((a, b) => range(a, pos) - range(b, pos))[0];
+      if (!target) continue;
+      const angle = Math.atan2(target.y - pos.y, target.x - pos.x);
+      this.bullets.push({
+        ...pos,
+        vx: Math.cos(angle) * 420,
+        vy: Math.sin(angle) * 420,
+        life: 1,
+        damage: unit.damage,
+        fleet: true,
+      });
+      this.fleetCooldown[id] = unit.period;
     }
   }
   destroy(o) {

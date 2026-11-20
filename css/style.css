@@ -730,3 +730,16 @@ footer b {
   gap: 8px;
   margin-top: 12px;
 }
+.performance {
+  position: absolute;
+  z-index: 2;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #091222;
+  color: var(--cyan);
+  padding: 5px;
+  font: 10px monospace;
+  white-space: nowrap;
+  pointer-events: none;
+}

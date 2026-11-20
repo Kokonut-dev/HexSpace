@@ -1,3 +1,4 @@
+import { roster } from "../systems/fleet.js";
 import { hulls, modules, starter } from "../customization/modules.js";
 export const fresh = () => ({
   version: 1,
@@ -17,7 +18,7 @@ export const fresh = () => ({
   market: {},
   influence: {},
   quest: null,
-  hired: false,
+  roster: [],
   wingOrder: "escort",
   docked: false,
   assist: true,
@@ -39,8 +40,19 @@ export function restore(storage) {
         d[k] = x[k];
     for (const k of ["x", "y"])
       if (Number.isFinite(x[k])) d[k] = Math.max(-900, Math.min(900, x[k]));
-    for (const k of ["docked", "assist", "hired"])
+    for (const k of ["docked", "assist"])
       if (typeof x[k] === "boolean") d[k] = x[k];
+    d.roster = Array.isArray(x.roster)
+      ? [
+          ...new Set(
+            x.roster.filter(
+              (id) => typeof id === "string" && Object.hasOwn(roster, id),
+            ),
+          ),
+        ]
+      : x.hired === true
+        ? ["pilot"]
+        : [];
     if (["escort", "focus", "hold"].includes(x.wingOrder))
       d.wingOrder = x.wingOrder;
     if (Object.hasOwn(hulls, x.ship)) d.ship = x.ship;

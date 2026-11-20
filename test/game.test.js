@@ -169,3 +169,38 @@ test("command cruiser has reactor headroom and can be sold only while inactive",
   assert.match(game.sellHull("argosy"), /sold/);
   assert.equal(game.d.owned.includes("argosy"), false);
 });
+
+import { activeFleet, hire } from "../src/systems/fleet.js";
+test("hull command slots constrain active mercenaries and preserve reserves", () => {
+  const d = fresh();
+  d.credits = 3000;
+  d.docked = true;
+  assert.equal(hire(d, "pilot"), true);
+  assert.equal(hire(d, "lancer"), false);
+  d.ship = "argosy";
+  assert.equal(hire(d, "lancer"), true);
+  assert.equal(hire(d, "aegis"), true);
+  assert.equal(activeFleet(d).length, 3);
+  d.ship = "wayfarer";
+  assert.deepEqual(activeFleet(d), ["pilot"]);
+  assert.equal(d.roster.length, 3);
+});
+test("old hired-wingmate saves migrate to a roster", () => {
+  const storage = {
+    getItem: () => JSON.stringify({ version: 1, hired: true }),
+  };
+  assert.deepEqual(restore(storage).roster, ["pilot"]);
+});
+test("escort fires its own projectile and hold order prevents support", () => {
+  const g = new Game(() => {});
+  g.d.roster = ["pilot"];
+  const o = g.objects.find((o) => o.type === "raider");
+  o.x = 90;
+  o.y = 0;
+  g.d.wingOrder = "hold";
+  g.updateFleet(0.1);
+  assert.equal(g.bullets.length, 0);
+  g.d.wingOrder = "escort";
+  g.updateFleet(0.1);
+  assert.equal(g.bullets[0].fleet, true);
+});
