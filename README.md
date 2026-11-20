@@ -19,18 +19,15 @@ On touch devices, use the direction buttons, tap the viewport to aim, then hold 
 
 ## Deploy to GitHub Pages
 
-1. Put the repository files on the branch you want to publish.
-2. In repository **Settings → Pages**, select **Deploy from a branch**, choose that branch and **/ (root)**, and save.
-3. Open the URL reported by Pages. The game uses relative paths and requires no server, secrets, build, or base-URL changes. Add a `.nojekyll` file in the root if needed to prevent Jekyll processing.
+Follow the [GitHub Pages deployment guide](docs/GITHUB-PAGES.md). Publish the repository root; the checked-in `.nojekyll` and relative asset paths are ready for a project page without a build, backend, secrets, or package installation.
 
-See [the architecture blueprint](docs/ARCHITECTURE.md) for design references, state transitions and data contracts. The game currently offers a compact progression loop with two playable hulls, one hired support wingmate, and seeded frontier sectors. It is not a fleet-command simulator; faction control is generated, not simulated continuously.
+See [the architecture guide](docs/ARCHITECTURE.md) for module boundaries, state transitions and data contracts. The game currently offers a compact progression loop with two playable hulls, one hired support wingmate, and seeded frontier sectors. It is not a fleet-command simulator; faction control is generated, not simulated continuously.
 
 ## Development & Architecture
 
-- **Architecture**: Pure client-side HTML5/CSS3/JS (dependency-free, no-asset architecture). 2.5D pixel-art open-world space exploration/RPG.
-- **Modules**: `src/{config,core,entities,systems,customization,station,world,ui}/`, `index.html`, `css/style.css`.
-- **Tests**: Run `node --test test/game.test.js` (covers contracts, 2.5D interior/avatar, render stubs, economy, fitting, save/load/export, simulation tick).
-- **Deployment**: GitHub Pages root deployment (relative paths, `.nojekyll`).
+- **Architecture**: Pure client-side HTML5/CSS3/JavaScript, procedurally generated pixel art, 2.5D interiors, and no runtime package dependencies.
+- **Tests**: Run `npm test` with Node.js 22. The suite covers simulation, fitting, missions, persistent economy/refuelling, station movement and saves. Additional smoke scripts live under `.scratch/`.
+- **Deployment**: GitHub Pages root deployment; see [docs/GITHUB-PAGES.md](docs/GITHUB-PAGES.md).
 
 ## Old Prototype
 

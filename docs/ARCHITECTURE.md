@@ -1,175 +1,85 @@
 # HexSpace — Architecture
 
-Zero-build static ES modules. No runtime dependencies, no network calls, no backend.
-Everything below runs from the repository root on GitHub Pages.
+HexSpace is a root-served, client-only browser game. The live app has no runtime package dependencies, API calls, backend, build step, or remotely hosted fonts/assets. It runs from `index.html` on GitHub Pages and uses relative ES-module and CSS paths.
 
-## 1. Stack decision
+## Stack
 
-| Layer      | Choice                                            | Why                                                                   |
-| ---------- | ------------------------------------------------- | --------------------------------------------------------------------- |
-| Rendering  | Hand-written Canvas2D pixel pipeline               | Deterministic 480×270 framebuffer, no 1.2 MB engine, Node-testable draw code, lossless nearest-neighbour upscale |
-| Audio      | WebAudio synthesis (`core/audio.js`)               | Zero audio assets, instant load, engine hum and score react to play state |
-| Simulation | Pure ES modules over plain state objects           | Unit-testable without DOM or GPU                                      |
-| UI         | DOM + CSS over the canvas                          | Crisp text, native accessibility, touch targets, no font raster cost  |
-| Storage    | `localStorage` with schema validation + migration  | Simple, synchronous, survives tabs; export/import as base64           |
+| Concern | Implementation |
+|---|---|
+| Rendering | Canvas2D pixel framebuffer, fixed 270 px height, nearest-neighbour upscale |
+| Simulation | Modular ES modules with plain state objects and fixed 60 Hz updates |
+| Audio | Procedural Web Audio synthesis; initialized after a user gesture |
+| UI | DOM/CSS menus and HUD around the game canvas; touch controls included |
+| Persistence | Versioned, validated localStorage save, export/import checksum |
+| Content | Seeded hex sectors, station layouts, encounters, markets, jobs and story |
 
-Phaser/Howler were evaluated and removed: the fixed low-resolution framebuffer makes a
-general engine's scene graph redundant, and a dependency-free renderer keeps load
-instant and every draw path testable in Node.
+The core remains dependency-free. Phaser/Howler were removed after the low-resolution custom renderer and small synthesized-audio layer became a better fit for the self-contained Pages target.
 
-## 2. Module map
+## Module map
 
-```
-index.html                  canvas + HUD skeleton + screen root
-css/style.css               shell, HUD, modal screens, responsive + touch
-src/config.js               all tunables: factions, goods, hulls, modules, enemies, balance
-src/core/utils.js           math, seeded RNG, formatting, DOM helpers
-src/core/save.js            schema validation, migration, export/import
-src/core/audio.js           WebAudio synthesis: score, ambience, SFX bus
-src/core/input.js           keyboard/pointer/touch -> abstract intent
-src/world/hex.js            axial hex math, layout, picking
-src/world/galaxy.js         seeded sectors, factions, POIs, travel rules
-src/world/sector.js         runtime world construction for one sector
-src/entities/entities.js    factories: ships, rocks, wrecks, pickups, projectiles
-src/customization/fitting.js  slots, aggregate stats, install/buy, repairs
-src/customization/shipart.js  procedural sprite generation (ships, stations, avatars)
-src/systems/flight.js       thrust, assist, drag, bounds, afterburner
-src/systems/combat.js       firing, projectiles, missiles, damage, loot
-src/systems/ai.js           enemy/friendly ship behaviour
-src/systems/economy.js      prices, stock, buy/sell, market drift
-src/systems/missions.js     job generation, acceptance, progress, rewards, story
-src/station/layout.js       seeded interior layout, collision, interaction zones
-src/station/avatar.js       on-foot movement, animation clock, interactables
-src/station/art.js          floor/wall pre-render, props, depth-sorted draw
-src/render/frame.js         framebuffer, resize, letterbox-free aspect, CRT overlay
-src/render/fx.js            particles, floaters, shake, flashes, warp streaks
-src/render/starfield.js     parallax stars, nebulae, planets
-src/render/flight.js        flight-scene draw
-src/render/station.js       station-scene draw
-src/render/map.js           galaxy map draw
-src/ui/hud.js               DOM HUD bindings
-src/ui/screens.js           title, map, fitting, market, contracts, dialogue, settings…
-src/game.js                 mode state machine, tick, transitions, autosave, wiring
-src/main.js                 boot, resize, global error surface
-test/*.test.js              node:test suites (logic + headless simulation)
-```
-
-## 3. State machine
-
-```
-        ┌──────────┐  new/continue   ┌────────────┐
-        │  TITLE   │────────────────►│   FLIGHT   │◄───────────┐
-        └──────────┘                 └─────┬──────┘            │
-             ▲                             │ near station + E  │ undock (airlock)
-             │ hull lost                   ▼                   │
-        ┌────┴─────┐  tow/restart   ┌────────────┐             │
-        │ GAME OVER│◄───────────────│  DOCKING   │             │
-        └──────────┘                └─────┬──────┘             │
-                                          ▼                    │
-                                    ┌────────────┐             │
-                                    │  STATION   │─────────────┘
-                                    └─────┬──────┘
-   overlays (pause simulation): GALAXY MAP, FITTING, MARKET, CONTRACTS, DIALOGUE,
-   SHIPYARD, CLINIC, SETTINGS, HELP, CODEX, STORY, ENDING
+```text
+index.html                    root document and relative entry point
+.nojekyll                     keep GitHub Pages from transforming static files
+css/style.css                 responsive theme, chrome, touch and modal styling
+docs/GAME-DESIGN.md           design and gameplay reference
+docs/GITHUB-PAGES.md          deployment and save-origin guidance
+src/config.js                 balance, content and palette data
+src/core/utils.js             math, seeded PRNG, formatting and DOM helpers
+src/core/save.js              save schema, validation, migration, import/export
+src/core/input.js             keyboard, pointer and touch intent
+src/core/audio.js             synthesized music bed, engine and SFX
+src/world/hex.js              axial hex math and projection
+src/world/galaxy.js           deterministic sectors, routes and travel rules
+src/world/sector.js           runtime encounter/POI construction
+src/entities/entities.js      entity factories
+src/customization/fitting.js  hull/module fitting and derived ship stats
+src/systems/flight.js         Newtonian thrust, assist and bounds
+src/systems/combat.js         weapons, damage, loot and projectiles
+src/systems/ai.js             enemy and wingmate behavior
+src/systems/economy.js        persistent market stock, trade, cargo and refuel
+src/systems/missions.js       jobs, progression, story objectives and rewards
+src/station/layout.js         seeded rooms, props, collision and walkable spawn
+src/station/avatar.js         on-foot movement and interactable probing
+src/render/frame.js           low-resolution framebuffer and camera
+src/render/shipart.js         procedural sprite baking
+src/render/spritecache.js     generated art caches and draw helpers
+src/render/flight.js          flight scene
+src/render/stationview.js     2.5D station interior
+src/render/mapview.js         hex galaxy map
+src/render/hud.js             canvas HUD and post effects
+src/ui/dom.js                 safe DOM builder primitives
+src/ui/ui.js                  chrome, market, map, fitting, missions and menus
+src/ui/canvasfx.js            title edge decoration
+src/game.js                   orchestration, transitions, persistence and actions
+src/main.js                   composition root, rendering wiring and fixed-step loop
+test/game.test.js             Node regression tests
 ```
 
-`game.mode` holds the base mode (`title|flight|station|gameover|ending`), `game.screen`
-holds an optional overlay. Esc always closes overlays; the map is accessible in flight
-(and when docked for planning, but jumping requires undocking).
+## Runtime flow
 
-## 4. Tick pipeline (fixed 60 Hz accumulator)
+`main.js` creates UI chrome first, then the framebuffer, art/input services and game. The UI receives its Game reference after both are constructed so the DOM event handlers can resolve the game without a construction cycle. The animation loop caps long tab-resume gaps, advances simulation in 1/60-second ticks, and renders once per browser frame.
 
-```
-input.poll()
-  ├─ overlay screen? → drain UI events, render, return
-  └─ flight:
-       flight.stepPlayer()      aim, thrust, drag, afterburner, bounds
-       combat.stepFire()        heat, cooldown, spawn projectiles/missiles
-       ai.step()                friendly/hostile steering, shooting
-       combat.stepProjectiles() collisions, shield/hull, hits, destruction
-       combat.stepPickups()      tractor range, collection, objective events
-       mission progress events  kills, scans, dockings, deliveries
-       fx.step()                particles, floaters, shake decay, slow-mo timer
-       render.flight()          world + HUD-anchored canvas elements
-     station:
-       avatar.step()            walk, collision, animation
-       interaction probe        nearest terminal/NPC prompt
-       render.station()         floor, depth-sorted entities, lights, player
+```text
+input.poll → flight physics / combat / AI / missions → effects → render
+                 └─ station mode: avatar collision + interaction probe
 ```
 
-Simulation is deterministic given (state, input, dt); randomness uses a per-session
-seeded PRNG (`state.seed` counters) so replays and tests are stable.
+Opening a modal pauses the simulation while UI events, effects and autosave continue. Map overlays are drawn from deterministic sector data; the player must undock before travel.
 
-## 5. Data contracts
+## 2.5D and pixel contracts
 
-```ts
-// Ship (persisted)
-{ hull: 'kestrel', fit: { w1: 'autocannon'|null, e1: 'ionDrive', … },
-  hp: 90, shieldMax: 55, heat: 12, warp: 100, name: 'Wayfarer', paint: 0 }
+- `PixelFrame` fixes framebuffer height at 270 and clamps width to configured bounds. Camera positions snap to pixels.
+- Ship images are procedurally baked at scale 2 for 32 headings; fitting changes invalidate the player's cached bake.
+- Station decks are 960×600. Wall faces extrude 22 px; actors/props sort on foot-Y; room signs and light pools complete the depth cues.
+- Avatar speed is 132 px/s with axis-separated wall sliding. Station generation relocates an obstructed preferred spawn to a nearby walkable point with open movement exits.
+- CRT scanlines, vignette and damage/warp effects render into the framebuffer so their pixel grid remains aligned at every viewport size.
 
-// Stat sheet (derived, never persisted)
-{ mass, power, draw, thrust, shield, hull, cool, cargo, sensor,
-  jumpRange, jumpCostMod, weapons: [{ slot, def, cooldown, heat }],
-  secondary: {...}|null, repair, scoop, targeting, ecm }
+## Persistence and economy
 
-// Sector (deterministic from q,r,seed)
-{ q, r, key, name, depth, security: 'high'|'low'|'anarchy'|'deep',
-  faction: 'uss'|'helix'|'corsair'|'indie', economy: 'trade'|…,
-  techLevel, wealth, danger, station|null, pois: [...], tradeBias: { id: ±% } }
+A save is validated field-by-field on load; unsupported hulls/modules and malformed values are sanitized. Market records are stored under axial sector keys so stock changes survive leaving and revisiting a port. Transaction functions validate commodity, quantity, stock, credits and cargo capacity before mutation. `pagehide`, hidden-tab transitions, autosave intervals and key progression actions request saves; storage errors surface in the UI rather than crashing the game. Export/import gives users a portable save between browser origins.
 
-// Mission
-{ id, type: 'bounty'|'delivery'|'survey'|'salvage'|'patrol'|'smuggle'|'story',
-  issuer, faction, from, target: { q, r }, reward, rep, rank,
-  cargo?: { id, qty }, progress, goal, title, brief, story? }
+## Verification
 
-// Save (version 2)
-{ version, seed, credits, ship, cargo, ownedModules, ownedHulls,
-  rep, rank, story, pos, docked, missions, boardEpoch, market,
-  discovered: { 'q,r': { visited, scanned: [], cleared: [], looted: [] } },
-  stats, settings, log }
-```
+Run `npm test` with Node.js 22. The suite covers deterministic generation, flight/simulation, fitting, missions, market persistence and transaction accounting, refuelling, station walkability/avatar movement, and save round trips. The `.scratch/smoke1.mjs`, `smoke2.mjs`, and `smoke3.mjs` scripts provide additional end-to-end logic, simulation, and station-render checks. `find src test -name '*.js' -print0 | xargs -0 -n1 node --check` checks source syntax.
 
-`discovered` is the only per-sector mutable world record; runtime entities are rebuilt
-from the sector seed on entry, then filtered by `cleared`/`looted` so consequences stick.
-
-## 6. Rendering rules
-
-- World units = framebuffer pixels. Camera has integer translation; sprites are
-  pre-rendered at native scale and rotated in 32 baked headings (no runtime rotation
-  blur) unless the source is a simple primitive.
-- Draw order: parallax background → nebula → far bodies → pickups/wrecks → asteroids →
-  ships → projectiles → particles → foreground lights → canvas HUD cues.
-- Additive lighting uses `globalCompositeOperation = 'lighter'` with pre-rendered
-  radial glow sprites; capped per frame for mobile cost.
-- Station interiors render floors/walls from a pre-rendered canvas, then sort props,
-  NPCs and the player by `y + feet`, draw wall faces, decals and light pools last.
-- The framebuffer is resized on window resize (height fixed at 270, width =
-  `round(270 * aspect)` clamped 400–720) and CSS-scaled with `image-rendering: pixelated`.
-
-## 7. Persistence & anti-corruption
-
-- All loaded values are clamped/type-checked; unknown modules/hulls are dropped.
-- Version 1 saves (previous prototype) migrate into the new schema with default
-  mappings rather than being discarded.
-- Writes are debounced (2 s) and forced on dock, jump, purchase, mission completion
-  and `pagehide`. Storage exceptions fall back to an in-memory save and surface a
-  status pill; the game never crashes on quota errors.
-- Export/import uses base64 JSON with a checksum, so pilots can move a campaign
-  between devices without a backend.
-
-## 8. Testing
-
-`npm test` runs headless Node suites over the pure layers:
-
-- hex math, galaxy determinism, faction/security derivation
-- fitting aggregation, power brownout, slot validation, cost/ownership
-- economy price monotonicity, stock limits, contraband rules
-- combat damage resolution, heat lock, missile lifecycle
-- mission generation/accept/progress/complete/fail
-- save round-trip, malformed input, v1 migration, export/import
-- station collision and interaction zones
-- 10 000-tick headless flight simulation asserting finite state, bounded entities,
-  projectile/particle reclamation
-
-The render layer is deliberately side-effect-thin and takes a `ctx`, allowing a
-recording mock in tests if draw calls are ever in question.
+A real browser visual pass is still recommended before release; headless-browser installation was not available in the build environment. The DOM integration can be module-loaded and the market screen builder exercised with the repository's Node DOM stub, but that does not replace browser QA.

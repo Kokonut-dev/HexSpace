@@ -49,7 +49,7 @@ export class AudioEngine {
         this.compressor.attack.value = 0.003;
         this.compressor.release.value = 0.25;
         this.master = this.ctx.createGain();
-        this.master.gain.value = (settings.masterVolume ?? 0.7) * 0.8;
+        this.master.gain.value = (settings.volume ?? settings.masterVolume ?? 0.7) * 0.8;
         this.compressor.connect(this.ctx.destination);
         this.master.connect(this.compressor);
       } catch (e) {
@@ -62,12 +62,16 @@ export class AudioEngine {
   }
 
   setActive(v) {
-    this.active = v;
-    if (!v && this.engineNode) {
-      this.engineNode.stop();
+    this.active = !!v;
+    if (!this.active) {
+      if (this.engineNode) this.engineNode.stop();
       this.engineNode = null;
       this.engineGain = null;
+      this.stopPad();
+      return;
     }
+    if (this.ctx?.state === "suspended") this.ctx.resume().catch(() => {});
+    this.startPad();
   }
 
   setSound(id, val) {
@@ -80,28 +84,43 @@ export class AudioEngine {
 
   // Generative pad/chords
   startPad() {
-    if (!this.ctx || !this.active) return;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.value = 110; // A2
-    gain.gain.value = 0.05;
-    osc.connect(gain);
-    gain.connect(this.master);
-    osc.start();
-    this.padNode = { osc, gain };
+    if (!this.ctx || !this.active || this.padNode) return;
+    const chords = [
+      [110, 164.81, 220], // A minor
+      [130.81, 164.81, 196], // C major
+      [98, 146.83, 196], // G
+      [110, 146.83, 174.61], // D minor
+    ];
+    const voices = chords[0].map((frequency, index) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = frequency;
+      gain.gain.value = [0.018, 0.011, 0.007][index];
+      osc.connect(gain);
+      gain.connect(this.master);
+      osc.start();
+      return { osc, gain };
+    });
+    this.padNode = voices;
+    let chord = 0;
+    this.padTimer = setInterval(() => {
+      if (!this.active || !this.padNode) return;
+      chord = (chord + 1) % chords.length;
+      const now = this.ctx.currentTime;
+      voices.forEach((voice, index) => voice.osc.frequency.setTargetAtTime(chords[chord][index], now, 0.8));
+    }, 4200);
   }
 
   stopPad() {
-    if (this.padNode) {
-      this.padNode.gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + 0.5);
-      setTimeout(() => {
-        if (this.padNode) {
-          this.padNode.osc.stop();
-          this.padNode = null;
-        }
-      }, 500);
-    }
+    const voices = this.padNode;
+    if (!voices) return;
+    this.padNode = null;
+    clearInterval(this.padTimer);
+    this.padTimer = null;
+    const now = this.ctx.currentTime;
+    for (const voice of voices) voice.gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.5);
+    setTimeout(() => voices.forEach((voice) => voice.osc.stop()), 500);
   }
 
   // Engine hum

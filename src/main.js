@@ -1,130 +1,92 @@
-import {
-  GAME,
-  PAL,
-  FACTIONS,
-  SECURITY,
-  ECONOMIES,
-  GOODS,
-  HULLS,
-  SHIP_RANKS,
-  MODULES,
-  CONSUMABLES,
-  ENEMIES,
-  ITEMS,
-  NAMES,
-  STORY,
-  JOBS,
-  CHATTER,
-} from "./config.js";
-import { freshGame } from "./core/save.js";
-import { buildWorld } from "./world/sector.js";
-import { shipStats } from "./customization/fitting.js";
-import { tickWorld } from "./systems/world-tick.js";
+import { GAME, PAL } from "./config.js";
 import { Input } from "./core/input.js";
-import { AudioEngine, audio } from "./core/audio.js";
+import { audio } from "./core/audio.js";
 import { PixelFrame } from "./render/frame.js";
 import { Art } from "./render/spritecache.js";
+import { createStarfield } from "./render/starfield.js";
+import { drawFlight, sectorTint } from "./render/flight.js";
+import { drawStation } from "./render/stationview.js";
+import { drawHud, drawOverlays } from "./render/hud.js";
+import { drawGalaxyMap } from "./render/mapview.js";
 import { Game } from "./game.js";
 import { UI } from "./ui/ui.js";
-import { h } from "./ui/dom.js";
-import { drawCrt, drawTitleEdge } from "./ui/canvasfx.js";
+import { drawTitleEdge } from "./ui/canvasfx.js";
 
-// Entry point
+// Entry point: all rendering, simulation, audio and persistence stay local to
+// this document so the app can be served directly from a GitHub Pages root.
 document.addEventListener("DOMContentLoaded", () => {
-  // 1. Canvas & Frame
-  const canvas = document.getElementById("hex-canvas");
-  if (!canvas) {
-    console.error("Canvas #hex-canvas not found");
+  const appRoot = document.getElementById("app");
+  if (!appRoot) {
+    console.error("HexSpace boot failed: #app root is missing.");
     return;
   }
+
+  const ui = new UI(null, appRoot);
+  const canvas = ui.els.canvas;
   const frame = new PixelFrame(canvas);
-
-  // 2. Art cache
-  const art = new Art();
-  art.init();
-
-  // 3. Input
+  const art = new Art().init();
   const input = new Input(canvas);
 
-  // 4. Audio
-  const audioEngine = new AudioEngine();
-  audio.init = (settings) => audioEngine.init(settings);
-  audio.setSound = (id, val) => audioEngine.setSound(id, val);
-  audio.setVolume = (v) => audioEngine.setVolume(v);
-  audio.setActive = (v) => audioEngine.setActive(v);
-  audio.updateEngine = (opts) => audioEngine.updateEngine(opts);
-  audio.play = (name) => audioEngine.play(name);
-
-  // 5. UI
-  const ui = new UI();
-  ui.mount(document.getElementById("ui-root"));
-
-  // 6. Render pipeline
+  let starfieldKey = "";
   const render = {
-    title: (ctx, frame, art, time) => {
-      ctx.fillStyle = GAME.PAL.void;
-      ctx.fillRect(0, 0, frame.width, frame.height);
-      ctx.fillStyle = GAME.PAL.white;
+    title(ctx, view, _art, time) {
+      ctx.fillStyle = PAL.void;
+      ctx.fillRect(0, 0, view.width, view.height);
+      ctx.fillStyle = PAL.white;
       ctx.font = "28px monospace";
       ctx.textAlign = "center";
-      ctx.fillText("HEXSPACE", frame.width / 2, frame.height / 2 - 40);
+      ctx.fillText(GAME.title, view.width / 2, view.height / 2 - 40);
       ctx.font = "14px monospace";
-      ctx.fillText("FRONTIER OPERATIONS", frame.width / 2, frame.height / 2);
-      drawTitleEdge(ctx, frame.width, frame.height, time);
+      ctx.fillText(GAME.subtitle, view.width / 2, view.height / 2);
+      drawTitleEdge(ctx, view.width, view.height, time);
     },
-    flight: (ctx, frame, world, effects, art, opts) => {
-      // Called from Game.render
+    flight(ctx, view, world, effects, cache, opts) {
+      const key = `${world.state.seed}:${world.sector.q},${world.sector.r}`;
+      if (key !== starfieldKey) {
+        cache.starfield = createStarfield((world.state.seed + world.sector.q * 7919 + world.sector.r * 104729) >>> 0);
+        starfieldKey = key;
+      }
+      drawFlight(ctx, view, world, effects, cache, opts);
     },
-    station: (ctx, frame, interior, avatar, art, opts) => {
-      // Called from Game.render
-    },
-    hud: (ctx, frame, world, game) => {
-      // Called from Game.render
-    },
-    overlays: (ctx, frame, effects, opts) => {
-      // Called from Game.render
-      if (opts.scanlines) drawCrt(ctx, frame.width, frame.height);
-    },
-    map: (ctx, frame, state, opts) => {
-      // Called from Game.render
-    },
-    sectorTint: (sector) => {
-      const sec = GAME.SECURITY[sector.security];
-      return sec ? sec.color : GAME.PAL.void;
-    },
+    station: drawStation,
+    hud: drawHud,
+    overlays: drawOverlays,
+    map: drawGalaxyMap,
+    sectorTint,
   };
 
-  // 7. Game Orchestrator
-  const game = new Game({
-    ui,
-    frame,
-    input,
-    art,
-    render,
-  });
-
-  // 8. Loop
+  const game = new Game({ ui, frame, input, art, render });
+  ui.game = game;
   let lastTime = performance.now();
+  let accumulator = 0;
+
   function loop(now) {
-    const dt = (now - lastTime) / 1000;
+    const elapsed = Math.max(0, (now - lastTime) / 1000);
     lastTime = now;
-
-    // Cap dt to prevent physics explosion on tab resume
-    const step = Math.min(dt, GAME.maxCatchUp);
-
-    game.update(step);
-    game.render(step);
-
+    // Fixed 60 Hz simulation with a bounded catch-up window after a suspended
+    // tab. Rendering remains once per browser frame.
+    accumulator += Math.min(elapsed, GAME.maxCatchUp);
+    let steps = 0;
+    while (accumulator >= GAME.tick && steps < 15) {
+      game.update(GAME.tick);
+      accumulator -= GAME.tick;
+      steps++;
+    }
+    if (steps === 15 && accumulator >= GAME.tick) accumulator %= GAME.tick;
+    game.render(elapsed);
     requestAnimationFrame(loop);
   }
 
-  // Boot
   game.boot();
   requestAnimationFrame(loop);
 
-  // Resize handling
-  window.addEventListener("resize", () => {
+  const resize = () => {
     frame.resize();
-    ui.resize();
+    ui.resize?.();
+  };
+  window.addEventListener("resize", resize);
+  window.addEventListener("pagehide", () => game.save(true));
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") game.save(true);
   });
 });
