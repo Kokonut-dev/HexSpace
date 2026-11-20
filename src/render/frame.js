@@ -1,10 +1,9 @@
 /**
  * Pixel framebuffer.
  *
- * Everything is drawn into a low-resolution offscreen canvas (height fixed at
- * 270px, width follows the viewport aspect) and then blitted to the visible
- * canvas with nearest-neighbour scaling. That single decision is what makes
- * hand-drawn art, generated sprites and CSS all agree on a pixel grid.
+ * World and UI geometry use a stable 270px logical height, rasterized into a
+ * 2x backing canvas before being blitted to the display. The logical pixel grid
+ * stays consistent while fine details and diagonal edges retain more clarity.
  */
 import { GAME } from "../config.js";
 
@@ -16,6 +15,7 @@ export class PixelFrame {
     this.bctx = this.buffer.getContext("2d", { alpha: false });
     this.width = 480;
     this.height = GAME.framebufferHeight;
+    this.pixelRatio = GAME.framebufferDensity ?? 2;
     this.scale = 1;
     this.dpr = 1;
     this.camera = { x: 0, y: 0 };
@@ -38,8 +38,8 @@ export class PixelFrame {
         Math.min(GAME.framebufferWidthMax, this.height * aspect),
       ),
     );
-    this.buffer.width = this.width;
-    this.buffer.height = this.height;
+    this.buffer.width = this.width * this.pixelRatio;
+    this.buffer.height = this.height * this.pixelRatio;
     this.bctx.imageSmoothingEnabled = false;
     this.scale = cssH / this.height;
     this.ctx.imageSmoothingEnabled = false;
@@ -71,7 +71,7 @@ export class PixelFrame {
 
   begin() {
     const c = this.bctx;
-    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.setTransform(this.pixelRatio, 0, 0, this.pixelRatio, 0, 0);
     c.globalAlpha = 1;
     c.globalCompositeOperation = "source-over";
     return c;
@@ -86,6 +86,7 @@ export class PixelFrame {
     c.fillRect(0, 0, this.canvas.width, this.canvas.height);
     c.drawImage(
       this.buffer,
+      0, 0, this.buffer.width, this.buffer.height,
       Math.round(this.offsetX * this.dpr),
       0,
       Math.round(this.width * this.scale * this.dpr),

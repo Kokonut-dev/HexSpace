@@ -16,7 +16,6 @@ const MOVE_KEYS = {
   KeyD: [1, 0],
   ArrowRight: [1, 0],
   KeyZ: [-1, 0],
-  KeyQ: [-1, 0],
 };
 
 export class Input {
@@ -129,6 +128,9 @@ export class Input {
   onPointerMove(e) {
     this.updatePointer(e);
     this.pointer.touch = e.pointerType === "touch";
+    // Aiming should work as soon as the mouse moves over the viewport; a
+    // preliminary click should not be required to wake up the pointer.
+    if (e.pointerType !== "touch") this.pointer.active = true;
   }
 
   onPointerUp(e) {
@@ -178,7 +180,7 @@ export class Input {
     this.flight.x = x;
     this.flight.y = y;
     this.flight.boost = this.keys.has("ShiftLeft") || this.keys.has("ShiftRight");
-    this.flight.brake = this.keys.has("KeyX") || this.keys.has("ControlLeft");
+    this.flight.brake = this.keys.has("KeyQ") || this.keys.has("KeyX") || this.keys.has("ControlLeft");
     this.flight.fire = this.keys.has("Space") || this.pointer.down;
     this.flight.secondary = this.pointer.secondaryDown;
     this.flight.assist = assist;

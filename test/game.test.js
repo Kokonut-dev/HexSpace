@@ -132,6 +132,18 @@ test("simulation tick and flight physics (assist vs unassisted)", () => {
   assert.ok(true, "World tick should progress state without crashing");
 });
 
+test("flight aiming rotates the ship and forward thrust follows its heading", () => {
+  const state = freshGame(422);
+  const fit = shipStats(state.hull, state.fit);
+  const player = { x: 0, y: 0, vx: 0, vy: 0, angle: -Math.PI / 2 };
+  stepPlayer(player, fit, {
+    x: 0, y: -1, boost: false, brake: false, aim: { x: 1, y: 0 }, assist: true,
+  }, 1 / 60, {});
+  assert.ok(player.angle > -Math.PI / 2, "mouse aim should rotate the nose toward the cursor");
+  assert.ok(player.vy < 0, "forward thrust should initially move along the ship's nose");
+  assert.ok(Math.abs(player.vx) < Math.abs(player.vy), "short thrust should not move sideways while the ship turns");
+});
+
 test("docking, fitting capacity, and contract/mission payout", () => {
   const game = new Game({ 
     ui: mockUI, frame: mockFrame, input: mockInput, art: mockArt, render: mockRender

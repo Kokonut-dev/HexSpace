@@ -192,6 +192,22 @@ function drawHullShape(ctx, hull, cx, cy, size, angle, tones, opts = {}) {
     ctx.fillRect(-cw / 2, cyy, 1, ch);
   }
 
+  // Hull plating: paired wing panels, access vents and bright nav lamps make
+  // each silhouette read clearly at gameplay scale instead of as a flat blob.
+  for (const side of [-1, 1]) {
+    const panelX = side * hull.art.span * scale * 0.34;
+    ctx.fillStyle = tones.light;
+    ctx.fillRect(panelX - SCALE / 2, -0.04 * scale, SCALE, 0.34 * scale);
+    ctx.fillStyle = tones.dark;
+    ctx.fillRect(panelX - SCALE, 0.28 * scale, 2 * SCALE, SCALE);
+    ctx.fillStyle = tones.accent;
+    ctx.fillRect(side * hull.art.span * scale * 0.58 - SCALE / 2, 0.42 * scale, SCALE, SCALE);
+  }
+  ctx.fillStyle = tones.light;
+  ctx.fillRect(-SCALE / 2, -0.78 * scale, SCALE, SCALE);
+  ctx.fillStyle = tones.deep;
+  ctx.fillRect(-SCALE, 0.66 * scale, 2 * SCALE, SCALE);
+
   // Engines: nacelles glow at the stern.
   const nacelles = hull.art.nacelles ?? 1;
   for (let i = 0; i < nacelles; i++) {
@@ -281,7 +297,8 @@ function renderShipCanvas(hull, size, angle, fit, opts = {}) {
 
 /**
  * Bake 32 headings for a hull+fit. Cached by hull+fit signature.
- * Returns { frames: [canvas], size, dim }.
+ * Returns { frames: [canvas], size, dim, drawScale } so high-density sprites
+ * can be displayed at the same logical footprint.
  */
 export function bakeShip(hullId, fit, opts = {}) {
   const hull = HULLS[hullId] ?? HULLS.kestrel;
@@ -291,7 +308,7 @@ export function bakeShip(hullId, fit, opts = {}) {
     const angle = (i / HEADINGS) * Math.PI * 2;
     frames.push(renderShipCanvas(hull, size, angle + Math.PI / 2, fit, opts));
   }
-  return { frames, size, dim: frames[0].width, hullId };
+  return { frames, size, dim: frames[0].width, hullId, drawScale: (opts.scale ?? SCALE) / SCALE };
 }
 
 /** Pick a baked heading for an arbitrary angle. */
