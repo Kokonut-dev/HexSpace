@@ -28,7 +28,7 @@ import { generateBoard, accept, abandon, advance, complete, acceptStory, storyCu
 import { saveGame, loadGame, deleteSave, exportSave, importSave, freshGame } from "./core/save.js";
 import { Effects } from "./render/fx.js";
 import { audio } from "./core/audio.js";
-import { clamp, fmt } from "./core/utils.js";
+import { clamp, fmt, seeded } from "./core/utils.js";
 import { createEnemyShip } from "./entities/entities.js";
 
 export class Game {
@@ -37,7 +37,7 @@ export class Game {
     this.frame = deps.frame;
     this.input = deps.input;
     this.art = deps.art;
-    this.render = deps.render; // { flight, station, map, hud, overlays }
+    this.renderer = deps.render; // { flight, station, map, hud, overlays }
     this.state = null;
     this.world = null;
     this.interior = null;
@@ -62,6 +62,9 @@ export class Game {
     this.overlaySector = null;
     this.lastDockKey = null;
     this.assist = true;
+    this.globalSettings = { sound: true, volume: 0.6, scanlines: true, shake: true };
+    this.audioSetSound = (enabled) => audio.setActive(enabled);
+    this.audioSetVolume = (volume) => audio.setVolume(volume);
     this.paused = false;
     this.stats = { fps: 60, frames: 0, fpsTime: 0 };
     this.tips = new Set();
@@ -109,7 +112,7 @@ export class Game {
     this.mode = "flight";
     this.screen = null;
     audio.init(this.state.settings);
-    audio.setActive(true);
+    audio.setActive(this.state.settings.sound !== false);
     this.enterSector(this.state.sector.q, this.state.sector.r, this.state.docked ? "station" : restored ? "station" : "home", true);
     if (this.state.docked) this.dock(true);
     this.save(true);
@@ -469,6 +472,7 @@ export class Game {
   doRefuel() {
     try {
       const q = applyRefuel(this.state, 100);
+      if (!q.ok) return this.toastMessage("Warp cells already full.", "info");
       this.toastMessage(`Warp cells topped up (${fmt(q.cost)} CR).`, "good");
       audio.play("reward");
     } catch (err) {
@@ -495,13 +499,14 @@ export class Game {
 
   doBuyGood(id, qty) {
     const sector = this.world?.sector ?? this.sectorInfo();
-    try {
-      const r = buy(this.state, sector, id, qty, this.sheet.cargo);
-      this.toastMessage(`Bought ${r.bought} ${GOODS[id].short} for ${fmt(r.spent)} CR.`, "good");
-      audio.play("pickup");
-    } catch (err) {
-      this.toastMessage(err.message, "warn");
+    const result = buy(this.state, sector, id, qty, this.sheet.cargo);
+    if (!result.ok) {
+      this.toastMessage(result.message, "warn");
       audio.play("error");
+    } else {
+      this.toastMessage(`Bought ${result.bought} ${GOODS[id].short} for ${fmt(result.spent)} CR.`, "good");
+      audio.play("pickup");
+      this.state.stats.trades++;
     }
     this.save(true);
     this.ui.refreshDossier?.();
@@ -510,14 +515,14 @@ export class Game {
 
   doSellGood(id, qty) {
     const sector = this.world?.sector ?? this.sectorInfo();
-    try {
-      const r = sell(this.state, sector, id, qty);
-      const fine = r.fine ? ` (illegal sale fine ${fmt(r.fine)} CR)` : "";
-      this.toastMessage(`Sold for ${fmt(r.earned)} CR${fine}.`, fine ? "warn" : "good");
-      audio.play("reward");
-    } catch (err) {
-      this.toastMessage(err.message, "warn");
+    const result = sell(this.state, sector, id, qty);
+    if (!result.ok) {
+      this.toastMessage(result.message, "warn");
       audio.play("error");
+    } else {
+      const fine = result.fine ? ` (illegal sale fine ${fmt(result.fine)} CR)` : "";
+      this.toastMessage(`Sold for ${fmt(result.earned)} CR${fine}.`, fine ? "warn" : "good");
+      audio.play("reward");
     }
     this.save(true);
     this.ui.refreshDossier?.();
@@ -786,7 +791,11 @@ export class Game {
     } else if (event.type === "playerDestroyed") {
       this.onDeath();
     } else if (event.type === "reinforcement") {
-      spawnEncounters(this.world, Math.random, this.state.discovered[this.world.sector.key]);
+      spawnEncounters(
+        this.world,
+        seeded(this.state.seed, this.world.sector.q + this.time, this.world.sector.r),
+        this.state.discovered[this.world.sector.key],
+      );
       this.toastMessage("Corsair reinforcement inbound.", "warn");
     } else if (event.type === "escape") {
       this.toastMessage("A damaged raider escaped.", "info");
@@ -1150,12 +1159,12 @@ export class Game {
     const frame = this.frame;
     const ctx = frame.begin();
     if (this.mode === "title" || !this.state) {
-      this.render.title?.(ctx, frame, this.art, this.time);
+      this.renderer.title?.(ctx, frame, this.art, this.time);
       frame.present();
       return;
     }
     if (this.screen === "map") {
-      this.render.map?.(ctx, frame, this.state, {
+      this.renderer.map?.(ctx, frame, this.state, {
         cursor: this.mapCursor ?? { q: this.state.sector.q, r: this.state.sector.r },
         cursorSector: this.mapCursorSector,
         sectors: this.mapSectorList,
@@ -1166,28 +1175,28 @@ export class Game {
       return;
     }
     if (this.mode === "flight" && this.world) {
-      this.render.flight(ctx, frame, this.world, this.effects, this.art, {
+      this.renderer.flight(ctx, frame, this.world, this.effects, this.art, {
         dt,
-        tint: this.render.sectorTint?.(this.world.sector),
+        tint: this.renderer.sectorTint?.(this.world.sector),
         showLabels: true,
         banner: this.banner,
         prompt: this.banner ? null : this.promptFor(),
         playerBaked: this.art.playerBaked,
       });
-      this.render.hud?.(ctx, frame, this.world, this);
-      this.render.overlays?.(ctx, frame, this.effects, {
+      this.renderer.hud?.(ctx, frame, this.world, this);
+      this.renderer.overlays?.(ctx, frame, this.effects, {
         critical: this.world.player.hp < this.world.player.hullMax * 0.25,
         scanlines: this.state.settings.scanlines,
       });
     } else if ((this.mode === "station" || this.mode === "flight") && this.interior) {
-      this.render.station(ctx, frame, this.interior, this.avatar, this.art, {
+      this.renderer.station(ctx, frame, this.interior, this.avatar, this.art, {
         time: this.time,
         roomName: this.currentRoom && !this.currentRoom.hidden ? this.currentRoom.name : "",
         target: this.stationTarget,
         banner: this.banner,
         prompt: this.stationTarget ? { text: `[E] ${this.stationTarget.label}` } : { text: "[E] Nothing in reach" },
       });
-      this.render.overlays?.(ctx, frame, this.effects, { scanlines: this.state.settings.scanlines });
+      this.renderer.overlays?.(ctx, frame, this.effects, { scanlines: this.state.settings.scanlines });
     } else {
       ctx.fillStyle = "#05080f";
       ctx.fillRect(0, 0, frame.width, frame.height);

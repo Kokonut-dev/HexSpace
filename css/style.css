@@ -6,8 +6,6 @@
  * hostile targets. Everything is sized in px so the 270-pixel framebuffer looks
  * sharp at any window scale.
  */
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
-
 :root {
   --bg: #05070f;
   --panel: #0a0d18;

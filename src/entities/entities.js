@@ -74,7 +74,7 @@ export function createEnemyShip(defId, x, y, opts = {}) {
     fireTimer: rand(opts.rng ?? mulberry32(7), 0.4, 1.6),
     missileTimer: 6,
     aggro: 0,
-    patrolAngle: rand(Math.random, 0, Math.PI * 2),
+    patrolAngle: rand(opts.rng ?? mulberry32(7), 0, Math.PI * 2),
     home: { x, y },
     loot: opts.loot ?? null,
     bounty: opts.bounty ?? def.bounty,

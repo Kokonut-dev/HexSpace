@@ -1,94 +1,94 @@
-import {
-  GAME,
-  PAL,
-  FACTIONS,
-  SECURITY,
-  ECONOMIES,
-  GOODS,
-  HULLS,
-  SHIP_RANKS,
-  MODULES,
-  CONSUMABLES,
-  ENEMIES,
-  ITEMS,
-  NAMES,
-  STORY,
-  JOBS,
-  CHATTER,
-} from "../config.js";
-import { hexDistance } from "../world/hex.js";
+import { ECONOMIES, GOODS } from "../config.js";
 import { shipStats } from "../customization/fitting.js";
 
 /**
- * Calculate market price at a sector for a good.
- * Bias from ECONOMY + sector security + base price.
+ * Return the persistent local stock record for a sector. Markets are keyed by
+ * axial coordinates in the save so stock survives leaving and revisiting.
  */
-export function priceAt(state, sector, goodId) {
+function ensureMarket(state, sector) {
+  const key = sector.key ?? `${sector.q},${sector.r}`;
+  state.market ??= {};
+  let record = state.market[key];
+  if (!record) {
+    const economy = ECONOMIES[sector.economy] || {};
+    const stock = {};
+    for (const [id] of Object.entries(GOODS)) {
+      stock[id] = Math.max(0, Math.round((economy.stock?.[id] || 20) * (1 - (economy.bias?.[id] || 0) * 2)));
+    }
+    record = state.market[key] = { stock: sector.market ?? stock, drift: 0, priceMul: {}, sells: {}, visits: 0 };
+  }
+  record.stock ??= {};
+  sector.market = record.stock;
+  return record;
+}
+
+/**
+ * Calculate market price from economy bias, security, local supply and trade
+ * direction. The buy/sell spread keeps arbitrage from the same market negative.
+ */
+export function priceAt(state, sector, goodId, side = "buy") {
   const good = GOODS[goodId];
   if (!good) return 0;
-
-  const econ = ECONOMIES[sector.economy] || {};
-  const bias = econ.bias?.[goodId] || 0;
-  const securityFactor = sector.security === "high" ? 0.9 : sector.security === "low" ? 1.1 : sector.security === "anarchy" ? 1.3 : 1.0;
-  const stock = sector.market?.[goodId] || econ.stock?.[goodId] || 0;
-
-  // Supply/demand curve
-  const supplyFactor = 1 - (stock / 100);
-  const price = good.base * (1 + bias) * securityFactor * (1 + supplyFactor * 0.4);
-  return Math.round(price);
+  const economy = ECONOMIES[sector.economy] || {};
+  const bias = economy.bias?.[goodId] || 0;
+  const securityFactor = sector.security === "high" ? 0.9 : sector.security === "low" ? 1.1 : sector.security === "anarchy" ? 1.3 : 1;
+  const record = ensureMarket(state, sector);
+  const stock = record.stock[goodId] ?? economy.stock?.[goodId] ?? 0;
+  const supplyFactor = 1 - stock / 100;
+  const spread = side === "sell" ? 0.92 : 1.08;
+  return Math.max(1, Math.round(good.base * (1 + bias) * securityFactor * (1 + supplyFactor * 0.4) * spread));
 }
 
-/**
- * Buy goods from a sector market.
- * Returns { ok, bought, cost, message }.
- */
-export function buy(state, sector, goodId, amount, creditsAvailable) {
-  const price = priceAt(state, sector, goodId);
+/** Buy cargo; `capacity` is the ship's derived cargo limit. */
+export function buy(state, sector, goodId, amount, capacity = shipStats(state.hull, state.fit).cargo) {
+  const fail = (message) => ({ ok: false, bought: 0, cost: 0, spent: 0, message });
+  if (!GOODS[goodId]) return fail("Unknown commodity");
+  if (!Number.isInteger(amount) || amount <= 0) return fail("Choose a positive whole quantity");
+  const record = ensureMarket(state, sector);
+  const price = priceAt(state, sector, goodId, "buy");
   const total = price * amount;
-  
-  if (creditsAvailable < total) {
-    return { ok: false, bought: 0, cost: 0, message: "Insufficient credits" };
-  }
+  if (state.credits < total) return fail("Insufficient credits");
+  if ((record.stock[goodId] ?? 0) < amount) return fail("Insufficient stock");
+  if (Math.max(0, capacity - cargoUsed(state)) < amount) return fail("Insufficient cargo capacity");
 
-  const stock = sector.market?.[goodId] || 0;
-  if (stock < amount) {
-    return { ok: false, bought: 0, cost: 0, message: "Insufficient stock" };
-  }
-
-  const capacity = SHIP_RANKS.find(r => r.rank === state.rank)?.xp || shipStats(state.hull, state.fit).cargo || 14;
-  const used = cargoUsed(state);
-  const free = Math.max(0, capacity - used);
-  if (free < amount) {
-    return { ok: false, bought: 0, cost: 0, message: "Insufficient cargo capacity" };
-  }
-
-  // Execute
-  sector.market[goodId] -= amount;
+  record.stock[goodId] -= amount;
   state.credits -= total;
-  state.cargo[goodId] = (state.cargo?.[goodId] || 0) + amount;
-
-  return { ok: true, bought: amount, cost: total, message: `Bought ${amount} ${goodId}` };
+  state.cargo[goodId] = (state.cargo[goodId] || 0) + amount;
+  return { ok: true, bought: amount, cost: total, spent: total, message: `Bought ${amount} ${goodId}` };
 }
 
-/**
- * Sell goods to a sector market.
- * Returns { ok, sold, income, message }.
- */
+/** Sell cargo back into local supply at the market's bid price. */
 export function sell(state, sector, goodId, amount) {
+  const fail = (message) => ({ ok: false, sold: 0, income: 0, earned: 0, fine: 0, message });
+  if (!GOODS[goodId]) return fail("Unknown commodity");
+  if (!Number.isInteger(amount) || amount <= 0) return fail("Choose a positive whole quantity");
   const current = state.cargo?.[goodId] || 0;
-  if (current < amount) {
-    return { ok: false, sold: 0, income: 0, message: "Insufficient cargo" };
-  }
-
-  const price = priceAt(state, sector, goodId);
-  const income = price * amount;
-
-  // Execute
+  if (current < amount) return fail("Insufficient cargo");
+  const record = ensureMarket(state, sector);
+  const income = priceAt(state, sector, goodId, "sell") * amount;
   state.cargo[goodId] -= amount;
   state.credits += income;
-  sector.market[goodId] = (sector.market?.[goodId] || 0) + amount;
+  record.stock[goodId] = Math.min(999, (record.stock[goodId] ?? 0) + amount);
+  state.stats ??= {};
+  state.stats.trades = (state.stats.trades || 0) + 1;
+  state.stats.creditsEarned = (state.stats.creditsEarned || 0) + income;
+  return { ok: true, sold: amount, income, earned: income, fine: 0, message: `Sold ${amount} ${goodId}` };
+}
 
-  return { ok: true, sold: amount, income, message: `Sold ${amount} ${goodId}` };
+/** Legal-market display and sale availability for a commodity at a port. */
+export function goodStatusFor(sector, goodId) {
+  const legal = GOODS[goodId]?.legal ?? "legal";
+  if (legal === "restricted") return sector.security === "high" ? "Restricted" : "Legal";
+  if (legal === "contraband") return sector.security === "high" ? "Illegal" : "Contraband";
+  return "Legal";
+}
+
+export function isIllegalHere(sector, goodId) {
+  return goodStatusFor(sector, goodId) === "Illegal";
+}
+
+export function canSellHere(sector, goodId) {
+  return !isIllegalHere(sector, goodId) && goodStatusFor(sector, goodId) !== "Restricted";
 }
 
 /**
@@ -143,14 +143,9 @@ export function tradeHint(state, currentSector, targetSector, credits) {
  * Market for a sector.
  */
 export function marketFor(state, sector) {
-  const econ = ECONOMIES[sector.economy] || {};
-  const stock = {};
-  for (const [goodId, base] of Object.entries(GOODS)) {
-    const bias = econ.bias?.[goodId] || 0;
-    const qty = Math.max(0, Math.round((econ.stock?.[goodId] || 20) * (1 - bias * 2)));
-    stock[goodId] = qty;
-  }
-  return { stock, economy: sector.economy, security: sector.security };
+  const record = ensureMarket(state, sector);
+  record.visits = (record.visits || 0) + 1;
+  return { stock: record.stock, economy: sector.economy, security: sector.security };
 }
 
 /**
@@ -166,12 +161,18 @@ export function buyConsumable(state, id, price) {
 /**
  * Refuel warp cells.
  */
-export function applyRefuel(state, amount) {
-  const cost = amount * 2; // 2 CR per unit
-  if (state.credits < cost) throw new Error("Insufficient credits");
-  state.credits -= cost;
-  state.warp = Math.min(150, state.warp + amount);
-  return { ok: true, cost };
+export function refuelQuote(state, amount = 100) {
+  const missing = Math.max(0, Math.min(amount, 150 - (state.warp || 0)));
+  return { missing, cost: missing * 2 };
+}
+
+export function applyRefuel(state, amount = 100) {
+  const quote = refuelQuote(state, amount);
+  if (quote.missing <= 0) return { ok: false, cost: 0, missing: 0 };
+  if (state.credits < quote.cost) throw new Error("Insufficient credits");
+  state.credits -= quote.cost;
+  state.warp = Math.min(150, (state.warp || 0) + quote.missing);
+  return { ok: true, cost: quote.cost, missing: quote.missing };
 }
 
 /**

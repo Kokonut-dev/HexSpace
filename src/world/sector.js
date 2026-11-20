@@ -150,10 +150,11 @@ export function buildWorld(state, sector, stats, arrival = "gate") {
 
 export function spawnEncounters(world, rng, disc) {
   const { sector, state } = world;
+  const random = typeof rng === "function" ? rng : seeded(state.seed, sector.q, sector.r);
   const hostileCount = sector.hostiles;
 
   const pickHostile = () => {
-    const roll = rng();
+    const roll = random();
     if (sector.depth >= 5) {
       if (roll < 0.28) return "enforcer";
       if (roll < 0.66) return "gunship";
@@ -168,18 +169,17 @@ export function spawnEncounters(world, rng, disc) {
   };
 
   const spawnEnemyAt = (id, x, y, opts = {}) => {
-    const e = createEnemyShip(id, x, y, { rng, ...opts });
-    const def = ENEMIES[id];
-    e.loot = [{ id: "scrap", qty: 1 + Math.floor(Math.random() * 2) }];
-    if (Math.random() < 0.4) e.loot.push({ id: pick(rng, ["food", "meds", "tech"]), qty: 1 });
+    const e = createEnemyShip(id, x, y, { rng: random, ...opts });
+    e.loot = [{ id: "scrap", qty: 1 + Math.floor(random() * 2) }];
+    if (random() < 0.4) e.loot.push({ id: pick(random, ["food", "meds", "tech"]), qty: 1 });
     if (id === "gunship" || id === "enforcer") e.loot.push({ id: "arms", qty: 1 });
     world.enemies.push(e);
     return e;
   };
 
   for (let i = 0; i < hostileCount; i++) {
-    const a = Math.random() * Math.PI * 2;
-    const r = Math.random() * (SPAWN_RADIUS - 200 - 620) + 620;
+    const a = random() * Math.PI * 2;
+    const r = random() * (SPAWN_RADIUS - 200 - 620) + 620;
     spawnEnemyAt(pickHostile(), Math.cos(a) * r, Math.sin(a) * r, {
       toughness: 1 + sector.depth * 0.035,
     });
@@ -190,8 +190,8 @@ export function spawnEncounters(world, rng, disc) {
     if (m.goal?.kind === "kill" && !m.done && m.target?.q === sector.q && m.target?.r === sector.r) {
       const id = m.goal.target === "bounty" ? pickHostile() : m.goal.target;
       if (ENEMIES[id]) {
-        const a = rng() * Math.PI * 2;
-        const r = rand(rng, 620, 1200);
+        const a = random() * Math.PI * 2;
+        const r = rand(random, 620, 1200);
         const boss = spawnEnemyAt(id, Math.cos(a) * r, Math.sin(a) * r, {
           name: m.bountyName ? `Raider ${m.bountyName}` : undefined,
           missionTag: m.id,
@@ -214,7 +214,7 @@ export function spawnEncounters(world, rng, disc) {
     vey.dialogue = "vey";
   }
   if (sector.storyRole === "cartographer") {
-    const a = rng() * Math.PI * 2;
+    const a = random() * Math.PI * 2;
     spawnEnemyAt("corsair", Math.cos(a) * 420, Math.sin(a) * 420, { name: "Corsair Pursuer" });
     spawnEnemyAt("gunship", Math.cos(a + 0.6) * 520, Math.sin(a + 0.6) * 520, { name: "Corsair Pursuer" });
   }

@@ -21,7 +21,7 @@ import {
   GAME,
 } from "../config.js";
 import { slotLayout, shipStats, canInstall, statDiff, STAT_LABEL, repairQuote, hullPrice, canBuyHull, rankOf, moduleById } from "../customization/fitting.js";
-import { priceAt, marketFor, canSellHere, isIllegalHere, standingLabel, standingColor, refuelQuote, missileRestockCost, goodStatusFor, cargoUsed } from "../systems/economy.js";
+import { priceAt, marketFor, standingLabel, refuelQuote, goodStatusFor, canSellHere, cargoUsed } from "../systems/economy.js";
 import { missionProgressText, storyCardState, rankFromXp } from "../systems/missions.js";
 import { hexToPixel, hexPolygon, hexDistance, hexLine } from "../world/hex.js";
 import { generateSector, jumpWarpCost, canJump } from "../world/galaxy.js";
@@ -47,8 +47,6 @@ export class UI {
     // Canvas stage.
     const stage = h("div", { class: "stage" }, [
       h("canvas", { id: "game-canvas", "aria-label": "Space flight and station viewport", role: "img" }),
-      h("div", { class: "scanlines", "aria-hidden": "true" }),
-      h("div", { class: "vignette", "aria-hidden": "true" }),
     ]);
     this.els.stage = stage;
     const canvasEl = stage.querySelector("canvas") || document.createElement("canvas");
@@ -157,7 +155,19 @@ export class UI {
   }
 
   wireChrome() {
-    const g = this.game;
+    // UI chrome is built immediately before Game, so defer resolving game
+    // methods until an event fires (the constructor cycle is intentional).
+    const ui = this;
+    const g = new Proxy({}, {
+      get(_target, key) {
+        const value = ui.game?.[key];
+        return typeof value === "function" ? value.bind(ui.game) : value;
+      },
+      set(_target, key, value) {
+        if (ui.game) ui.game[key] = value;
+        return true;
+      },
+    });
     const q = (id) => document.getElementById(id);
     q("btn-map").onclick = () => (g.screen === "map" ? g.closeScreen() : g.openMap());
     q("btn-dock-map").onclick = () => (g.screen === "map" ? g.closeScreen() : g.openMap());
@@ -788,8 +798,8 @@ const SCREENS = {
             h("div", null, [h("small", null, "HOLD"), h("b", null, String(held)), h("span", null, "units")]),
           ]),
           h("div", { class: "trade-actions" }, [
-            $btn("BUY 1", () => { game.doBuyGood(id, 1); ui.rebuild(); }, { disabled: state.credits < buyPrice || cargoFree <= 0 || stock <= 2 }),
-            $btn("BUY 5", () => { game.doBuyGood(id, 5); ui.rebuild(); }, { disabled: state.credits < buyPrice || cargoFree <= 0 || stock <= 6 }),
+            $btn("BUY 1", () => { game.doBuyGood(id, 1); ui.rebuild(); }, { disabled: state.credits < buyPrice || cargoFree <= 0 || stock < 1 }),
+            $btn("BUY 5", () => { game.doBuyGood(id, 5); ui.rebuild(); }, { disabled: state.credits < buyPrice * 5 || cargoFree < 5 || stock < 5 }),
             $btn("SELL 1", () => { game.doSellGood(id, 1); ui.rebuild(); }, { disabled: !held || !sellable }),
             $btn("SELL ALL", () => { game.doSellGood(id, held); ui.rebuild(); }, { disabled: !held || !sellable }),
           ]),
@@ -920,8 +930,8 @@ const SCREENS = {
         return h("div", { class: "standing-row" }, [
           h("div", { class: "standing-name" }, [h("i", { style: { background: f.color } }), h("b", null, f.name), h("small", null, f.motto)]),
           h("div", { class: "standing-meter" }, [
-            bar((rep + 100) / 200, standingColor(rep)),
-            h("span", { style: { color: standingColor(rep) } }, `${standingLabel(rep)} · ${rep > 0 ? "+" : ""}${Math.round(rep)}`),
+            bar((rep + 100) / 200, rep >= 50 ? "#4ade80" : rep >= 0 ? "#60a5fa" : rep >= -40 ? "#facc15" : rep >= -80 ? "#fb923c" : "#ef4444"),
+            h("span", { style: { color: rep >= 50 ? "#4ade80" : rep >= 0 ? "#60a5fa" : rep >= -40 ? "#facc15" : rep >= -80 ? "#fb923c" : "#ef4444" } }, `${standingLabel(rep)} · ${rep > 0 ? "+" : ""}${Math.round(rep)}`),
           ]),
         ]);
       });

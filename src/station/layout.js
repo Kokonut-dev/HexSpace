@@ -402,7 +402,7 @@ export function buildInterior(station) {
   const spawn = { x: dockRoom.x + dockRoom.w / 2, y: dockRoom.y + dockRoom.h - 44 };
   const exit = { x: dockRoom.x + dockRoom.w / 2, y: dockRoom.y + 26, room: dockRoom.id };
 
-  return {
+  const interior = {
     station,
     rooms,
     corridors,
@@ -414,6 +414,22 @@ export function buildInterior(station) {
     deck: { w: DECK.w, h: DECK.h },
     seedLabel: station.name,
   };
+
+  // Keep the arrival point out of the ship cradle and other solid props. The
+  // preferred point is near the dock hatch, but generated props can occupy it.
+  const candidates = [];
+  for (let y = dockRoom.y + 16; y <= dockRoom.y + dockRoom.h - 16; y += 12) {
+    for (let x = dockRoom.x + 16; x <= dockRoom.x + dockRoom.w - 16; x += 12) {
+      if (!canWalk(interior, x, y, 8)) continue;
+      const exits = [
+        [12, 0], [-12, 0], [0, 12], [0, -12],
+      ].filter(([dx, dy]) => canWalk(interior, x + dx, y + dy, 8)).length;
+      candidates.push({ x, y, exits, distance: Math.hypot(x - spawn.x, y - spawn.y) });
+    }
+  }
+  candidates.sort((a, b) => b.exits - a.exits || a.distance - b.distance);
+  if (candidates.length) interior.spawn = { x: candidates[0].x, y: candidates[0].y };
+  return interior;
 }
 
 export function roomAt(interior, x, y) {

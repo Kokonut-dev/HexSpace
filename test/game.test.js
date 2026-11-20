@@ -4,10 +4,12 @@ import { Game } from "../src/game.js";
 import { generateSector, securityAt, sectorsAround, STORY_SECTORS } from "../src/world/galaxy.js";
 import { freshGame, loadGame, saveGame, exportSave, importSave, sanitize } from "../src/core/save.js";
 import { shipStats, slotLayout, canInstall, installModule, stationPrice, hullPrice, canBuyHull, changeHull } from "../src/customization/fitting.js";
-import { priceAt, buy, sell, cargoUsed, cargoFree, cargoValue, tradeHint, marketFor } from "../src/systems/economy.js";
+import { priceAt, buy, sell, cargoUsed, cargoFree, cargoValue, tradeHint, marketFor, refuelQuote, applyRefuel, goodStatusFor } from "../src/systems/economy.js";
 import { stepPlayer, applyBounds } from "../src/systems/flight.js";
 import { tickWorld } from "../src/systems/world-tick.js";
 import { buildWorld } from "../src/world/sector.js";
+import { buildInterior, canWalk } from "../src/station/layout.js";
+import { createAvatar, stepAvatar } from "../src/station/avatar.js";
 import * as CONFIG from "../src/config.js";
 
 // Stub DOM and requestAnimationFrame for Node environment
@@ -90,6 +92,14 @@ test("hex galaxy generation is deterministic and security ratings match config",
   
   const neighbors = sectorsAround(12345, 2, -1, 1);
   assert.ok(neighbors.length > 0, "Should return adjacent hex sectors");
+
+  const state = freshGame(12345);
+  const home = generateSector(state.seed, 0, 0);
+  const stats = shipStats(state.hull, state.fit);
+  const worldA = buildWorld(state, home, stats, "station");
+  const worldB = buildWorld(state, home, stats, "station");
+  const encounterData = (world) => world.enemies.map(({ defId, x, y, loot, patrolAngle, fireTimer }) => ({ defId, x, y, loot, patrolAngle, fireTimer }));
+  assert.deepEqual(encounterData(worldA), encounterData(worldB), "sector encounters and loot should be reproducible from the seed");
 });
 
 test("simulation tick and flight physics (assist vs unassisted)", () => {
@@ -131,7 +141,8 @@ test("docking, fitting capacity, and contract/mission payout", () => {
   game.state = freshGame();
   game.syncStats();
   game.beginCampaign(false);
-  
+
+  assert.equal(typeof game.render, "function", "render loop method should not be shadowed by renderer dependencies");
   assert.ok(game.state !== undefined, "Game should boot and initialize state");
 
   // Test fitting logic
@@ -183,6 +194,49 @@ test("docking, fitting capacity, and contract/mission payout", () => {
 
   const market = marketFor(game.state, sectorData);
   assert.ok(market.stock !== undefined, "Market stock should exist");
+});
+
+test("market transactions persist stock and charge valid credits; refuel uses missing capacity", () => {
+  const state = freshGame(9191);
+  const sector = generateSector(state.seed, 0, 0);
+  const market = marketFor(state, sector);
+  const initialStock = market.stock.ore;
+  const buyQuote = priceAt(state, sector, "ore", "buy");
+  const sellQuote = priceAt(state, sector, "ore", "sell");
+  assert.ok(buyQuote > sellQuote, "buy price should include a market spread");
+
+  const bought = buy(state, sector, "ore", 2, shipStats(state.hull, state.fit).cargo);
+  assert.equal(bought.ok, true);
+  assert.equal(bought.spent, buyQuote * 2);
+  assert.equal(state.credits, CONFIG.GAME.startCredits - bought.spent);
+  assert.equal(marketFor(state, generateSector(state.seed, 0, 0)).stock.ore, initialStock - 2,
+    "market stock should persist across sector regeneration");
+
+  const sellQuoteBefore = priceAt(state, sector, "ore", "sell");
+  const sold = sell(state, sector, "ore", 1);
+  assert.equal(sold.ok, true);
+  assert.equal(sold.earned, sellQuoteBefore);
+  assert.equal(cargoUsed(state), 1);
+
+  state.warp = 125;
+  assert.deepEqual(refuelQuote(state, 100), { missing: 25, cost: 50 });
+  const refueled = applyRefuel(state, 100);
+  assert.equal(refueled.cost, 50);
+  assert.equal(state.warp, 150);
+  assert.equal(goodStatusFor({ security: "high" }, "bloom"), "Illegal");
+});
+
+test("station arrival spawn is walkable and the avatar can move", () => {
+  const sector = generateSector(4242, 0, 0);
+  assert.ok(sector.station, "test sector should have a station");
+  const interior = buildInterior(sector.station);
+  const avatar = createAvatar(interior);
+  const startY = avatar.y;
+  assert.ok(canWalk(interior, avatar.x, avatar.y, avatar.radius), "spawn must not overlap walls or solid props");
+
+  for (let i = 0; i < 10; i++) stepAvatar(avatar, interior, { x: 0, y: -1 }, 1 / 60);
+  assert.ok(avatar.y < startY, "avatar should move from the station arrival point");
+  assert.ok(Math.abs(avatar.y - startY) <= 23, "avatar should move near 132 pixels per second");
 });
 
 test("save round trip and malformed storage fallback", () => {
