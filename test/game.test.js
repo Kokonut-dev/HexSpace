@@ -102,3 +102,70 @@ test("firing heats the ship and can destroy an asteroid", () => {
   assert.equal(o.dead, true);
   assert.equal(g.d.cargo.ore, 4);
 });
+
+import { regionalState, support } from "../src/world/universe.js";
+import { offers } from "../src/systems/economy.js";
+test("player contributions can shift control of a frontier hex", () => {
+  const d = fresh();
+  const s = regionalState(d, 3, 0);
+  assert.equal(s.faction, "Free Corsairs");
+  assert.equal(s.security, "Anarchy");
+  support(d, s, "United Systems", 12);
+  assert.equal(regionalState(d, 3, 0).faction, "United Systems");
+  assert.equal(regionalState(d, 3, 0).security, "Low");
+});
+test("contract board rotates and courier requires its assigned destination", () => {
+  const game = new Game(() => {});
+  const early = offers(game.d, game.s);
+  game.d.clock = 6;
+  assert.notDeepEqual(offers(game.d, game.s), early);
+  game.d.quest = early.find((o) => o.type === "meds");
+  game.d.cargo.meds = game.d.quest.quantity;
+  assert.match(game.claim(), /not met/);
+  const [q, r] = game.d.quest.destination.split(",").map(Number);
+  assert.equal(game.jump(sector(q, r)), true);
+  assert.match(game.claim(), /paid/);
+  assert.equal(game.d.cargo.meds, 0);
+});
+test("an ion nebula slows cooling", () => {
+  const game = new Game(() => {});
+  game.jump(sector(1, 0));
+  game.jump(sector(2, 0));
+  Object.assign(game.p, { x: game.cloud.x, y: game.cloud.y, heat: 50 });
+  game.update(0.1, { x: 0, y: 0 });
+  assert.ok(game.p.heat > 49);
+});
+
+import { stationLayout } from "../src/station/interior.js";
+import { conversation } from "../src/station/dialogue.js";
+test("seeded station layouts preserve the airlock and every service", () => {
+  const home = stationLayout(sector(0, 0));
+  const frontier = stationLayout(sector(2, -1));
+  assert.deepEqual(frontier, stationLayout(sector(2, -1)));
+  assert.deepEqual(frontier.rooms.at(-1), home.rooms.at(-1));
+  assert.notDeepEqual(frontier.rooms, home.rooms);
+  assert.deepEqual(
+    frontier.rooms.map((r) => r.id),
+    ["fit", "cantina", "market", "hq", "exit"],
+  );
+});
+test("dialogue responds to faction reputation and exposes the contract board", () => {
+  const d = fresh(),
+    s = sector(0, 0);
+  const before = conversation(s, d);
+  d.rep[s.faction] = 5;
+  const after = conversation(s, d);
+  assert.notEqual(before.welcome.text, after.welcome.text);
+  assert.ok(after.welcome.choices.some(([, target]) => target === "board"));
+});
+test("command cruiser has reactor headroom and can be sold only while inactive", () => {
+  const game = new Game(() => {});
+  game.d.docked = true;
+  game.d.credits = 5000;
+  assert.match(game.purchaseHull("argosy"), /commissioned/);
+  assert.equal(game.fit.power, 102);
+  assert.match(game.sellHull("argosy"), /inactive/);
+  game.purchaseHull("wayfarer");
+  assert.match(game.sellHull("argosy"), /sold/);
+  assert.equal(game.d.owned.includes("argosy"), false);
+});

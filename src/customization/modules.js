@@ -22,6 +22,16 @@ export const modules = {
   warp: ["Warp Engine", "utility", 580, 9, 19, { warp: 1 }],
 };
 export const hulls = {
+  argosy: {
+    name: "Argosy",
+    label: "Fleet Command Cruiser",
+    price: 4100,
+    mass: 46,
+    cargo: 60,
+    hull: 248,
+    power: 32,
+    cooling: 7,
+  },
   wayfarer: {
     name: "Wayfarer",
     label: "Light Explorer",
@@ -51,8 +61,8 @@ export function stats(fit, hull = "wayfarer") {
     result = {
       mass: base.mass,
       draw: 0,
-      power: 0,
-      cooling: 11,
+      power: base.power ?? 0,
+      cooling: 11 + (base.cooling ?? 0),
       hull: base.hull,
       shield: 0,
       cargo: base.cargo,

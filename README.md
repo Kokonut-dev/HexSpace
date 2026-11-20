@@ -23,4 +23,8 @@ On touch devices, use the direction buttons, tap the viewport to aim, then hold 
 2. In repository **Settings → Pages**, select **Deploy from a branch**, choose that branch and **/ (root)**, and save.
 3. Open the URL reported by Pages. The game uses relative paths and requires no server, secrets, build, or base-URL changes.
 
-See [the system blueprint](docs/BLUEPRINT.md) for design references, state transitions and data contracts. The game currently offers a compact progression loop with two playable hulls, one hired support wingmate, and seeded frontier sectors. It is not a fleet-command simulator; faction control is generated, not simulated continuously.
+See [the system blueprint](docs/BLUEPRINT.md) for design references, state transitions and data contracts. Frontier ownership and security can shift as the action clock advances, and completing contracts or clearing raiders influences local control. Contract boards rotate, ion nebulae slow cooling, and a hired wingmate can escort, focus your selected target, or hold fire. Inactive purchased hulls can be sold at a shipyard.
+
+The **Argosy** command cruiser is the late-game hull: more armor, cargo space, built-in reactor headroom and cooling, at the cost of extra mass. Desktop WebGL enables the bloom pass; touch devices use Canvas to keep rendering costs low. Add `?canvas=1` to force the fallback on desktop.
+
+The repository’s [GitHub Pages site](https://kokonut-dev.github.io/HexSpace/) deploys from the root of `main`. Branch changes do not replace that build until they reach `main`.

@@ -37,3 +37,30 @@ Flight → hull loss → emergency recovery → Flight
 - **Station**: sector-local coordinate, name, four service rooms and collision bounds; market quotes derive from sector stats and trade history.
 - **Sector**: axial q/r, deterministic seed, security, faction, resource richness and generated POIs. Neighbor distance uses cube-coordinate distance.
 - **Save**: version, current coordinates, credits, fittings, cargo, reputation, contract, visited sectors, resolved POIs and action clock. Transient input and particles are never serialized.
+
+## Frontier simulation
+
+Regions are evaluated on demand; crossing one does not start background simulation for the infinite grid. Every 12 actions the regional competition modifier advances to the next deterministic epoch. Mission payouts and raider defeats add persistent, capped influence in the current hex, and the chart marks closely matched territories as contested. Security and contested status feed station quotes alongside market pressure and local abundance. The home sector remains protected.
+
+Every six actions, contract boards rotate their destinations, quantities, and payouts. Accepted offers store a copy so their terms do not change mid-flight. Bounties and courier runs point to a specific hex; the objective tracker highlights it on the map when in range. Some frontier hexes contain ion nebulae that cut cooling to 42% of normal, giving cooling modules a distinct use beyond weapon upgrades.
+
+### Roadmap audit
+
+| Step                     | Implemented                                                                                                                    | Remaining or not verified                                       |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
+| 1. Blueprint             | Comparative game-design analysis, state flow and data contracts                                                                | No new playtesting study                                        |
+| 2. Browser shell         | Responsive Phaser Canvas, static paths, vendored dependencies                                                                  | Device-wide performance qualification                           |
+| 3. Flight                | Inertia, assist, mouse aim, weapon heat, particles, destructible ore, enemy AI                                                 | More varied combat encounters                                   |
+| 4. Fitting               | Typed hardpoints, fitting diagram, weight/power/heat/cargo checks, hull purchases and resale                                   | More hull silhouettes and hull-specific slot layouts            |
+| 5. Stations              | Walkable room layout, seeded props, collision, terminals and NPCs                                                              | Additional station themes and dialogue arcs                     |
+| 6. Universe              | Adjacent travel, market quotes, contestable frontier control, procedural contracts and events                                  | Full independent fleet simulation is outside the current design |
+| 7. Polish and deployment | Runtime sprites, synth audio, CRT treatment, light-driven shadows, WebGL bloom with Canvas fallback, autosave, deployable root | Physical-device frame-rate benchmarks                           |
+
+### Design trade-offs and acceptance criteria
+
+- **Starsector / EVE Online:** regional price spreads create route planning only when the player can inspect both danger and reward. HexSpace uses bounded market pressure and visible security, without offline timers or other players controlling access.
+- **Freelancer / Escape Velocity:** visible destinations and short station visits make the next action obvious. A sector should offer useful work even if the player ignores the current contract; refits must not require replaying a docking cutscene.
+- **No Man’s Sky / Sunless Skies:** repeatable systems need recognizable local character. Station layouts, named contacts, rumors, distinct salvage events and hazards should contrast with the quiet of flight. Discovery alone is not a substitute for meaningful rewards.
+- **Everspace 2:** equipment should change the feel of combat, not just the damage number. A build that runs hot inside a nebula should behave differently from one using efficient guns and extra cooling.
+
+Release checks: reach every service from the airlock, finish a contract after reload, compare fitted and unfitted telemetry, make an adjacent jump, and inspect the hosted build from a project subpath without external requests. Measure physical-device frame time separately from simulated update rates.
