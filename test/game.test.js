@@ -147,12 +147,15 @@ test("docking, fitting capacity, and contract/mission payout", () => {
   assert.ok(installResult.ok, `installModule should return ok: ${installResult.message}`);
 
   // Test economy
-  const sectorData = generateSector(game.state.seed, 0, 0);
+  const sectorData = generateSector(game.state.seed, 2, -1);
+  sectorData.economy = "mining";
+  sectorData.market = marketFor(game.state, sectorData).stock;
   const beforePrice = priceAt(game.state, sectorData, "ore");
   assert.ok(typeof beforePrice === "number", "Price should be a number");
 
   try {
     const res = buy(game.state, sectorData, "ore", 1, 100);
+    assert.equal(res.ok, true, `Buy failed: ${res.message}`);
     assert.equal(res.bought, 1, "Should be able to buy ore if stock exists");
     assert.equal(cargoUsed(game.state), 1, "Cargo used should increment");
   } catch (e) {
@@ -167,10 +170,15 @@ test("docking, fitting capacity, and contract/mission payout", () => {
     assert.fail(`Sell failed: ${e.message}`);
   }
 
-  assert.equal(cargoFree(game.state, shipStats(game.state.fit.hull, game.state.fit)), shipStats(game.state.fit.hull, game.state.fit).cargo, "Cargo free should match hull capacity");
+  assert.equal(cargoFree(game.state, shipStats(game.state.hull, game.state.fit).cargo), shipStats(game.state.hull, game.state.fit).cargo, "Cargo free should match hull capacity");
   assert.ok(cargoValue(game.state, sectorData) >= 0, "Cargo value should be calculable");
 
-  const hint = tradeHint(game.state, sectorData, sectorData, 100);
+  // Create a distinct target sector for tradeHint (trade economy)
+  const targetSector = generateSector(game.state.seed, 3, -1);
+  targetSector.economy = "trade";
+  targetSector.market = marketFor(game.state, targetSector).stock;
+
+  const hint = tradeHint(game.state, sectorData, targetSector, 10000);
   assert.ok(hint !== null, "Trade hint should return best commodity");
 
   const market = marketFor(game.state, sectorData);
