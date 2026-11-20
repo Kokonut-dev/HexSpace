@@ -2,149 +2,21 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#080d18" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#05070f" />
+    <meta name="description" content="HexSpace — a single-player pixel-art space RPG: fly, fight, trade and refit across a hex frontier. Runs entirely in your browser." />
     <title>HexSpace — Frontier Operations</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2305070f'/%3E%3Cpath d='M16 5l9 5.2v11.6L16 27l-9-5.2V10.2z' fill='none' stroke='%2355e6d5' stroke-width='2'/%3E%3Cpath d='M16 10l3 9-3-2-3 2z' fill='%23eaf6ff'/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="./css/style.css" />
   </head>
   <body>
-    <header class="top">
-      <a class="brand" href="./"
-        ><span class="logo">⬡</span
-        ><span>HEX<span>SPACE</span><small>FRONTIER OPERATIONS</small></span></a
-      >
-      <nav aria-label="Main navigation">
-        <button class="active" data-view="flight">
-          ◈ <span>Flight Deck</span></button
-        ><button data-view="map">⬡ <span>Galaxy Map</span></button
-        ><button data-view="fit">⚙ <span>Ship Fitting</span></button>
-      </nav>
-      <div class="account">
-        <span>◈ <b id="credits">1,250</b> <small>CR</small></span
-        ><button
-          id="sound"
-          title="Toggle sound"
-          aria-label="Toggle sound"
-          aria-pressed="false"
-        >
-          ♫
-        </button>
+    <div id="app" class="app">
+      <div class="boot">
+        <div class="boot-mark">⬡</div>
+        <p>BOOTING FLIGHT SYSTEMS…</p>
+        <noscript>HexSpace needs JavaScript enabled to run. Everything else is local.</noscript>
       </div>
-    </header>
-    <main>
-      <section class="heading">
-        <div>
-          <div class="eyebrow">
-            <i></i> <span id="region">ORION EXPANSE</span>
-            <span class="slash">/</span> <span id="designation">SECTOR 01</span>
-          </div>
-          <h1 id="location">Kepler's Reach</h1>
-          <p id="location-info">Trade corridor · United Systems territory</p>
-        </div>
-        <span class="badge" id="security"><i></i> HIGH SECURITY</span>
-      </section>
-      <div class="layout">
-        <aside class="left">
-          <section class="panel">
-            <h2>◉ &nbsp; LOCAL SCANNER</h2>
-            <div class="radar">
-              <canvas
-                id="radar"
-                width="200"
-                height="200"
-                aria-label="Tactical radar"
-              ></canvas
-              ><span class="north">N</span>
-            </div>
-            <div class="subhead">
-              NEARBY CONTACTS <span id="count">04</span>
-            </div>
-            <div id="contacts"></div>
-          </section>
-          <section class="panel mission">
-            <h2>▤ &nbsp; FLIGHT LOG</h2>
-            <div id="log" role="log"></div>
-          </section>
-        </aside>
-        <section class="center">
-          <div class="viewport">
-            <div
-              id="game"
-              role="img"
-              aria-label="Spaceflight and station viewport"
-            ></div>
-            <div class="viewport-top">
-              <span><i></i> <b id="live-mode">LIVE FLIGHT</b></span
-              ><button id="assist" aria-pressed="true">ASSIST <b>ON</b></button>
-            </div>
-            <div id="toast" role="status" hidden></div>
-            <div class="viewport-bottom">
-              <span id="coords">X 0000 &nbsp; Y 0000</span
-              ><span id="speed">0 M/S</span>
-            </div>
-            <div id="overlay" hidden></div>
-          </div>
-          <div class="controls">
-            <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move</span
-            ><span><kbd>⤢</kbd> Aim</span><span><kbd>SPACE</kbd> Fire</span
-            ><span><kbd>E</kbd> Interact</span><span><kbd>M</kbd> Map</span>
-          </div>
-          <div class="touch" aria-label="Touch controls">
-            <button data-key="a">←</button><button data-key="w">↑</button
-            ><button data-key="s">↓</button><button data-key="d">→</button
-            ><button data-key=" ">Fire</button
-            ><button data-key="e">Interact</button>
-          </div>
-        </section>
-        <aside class="right">
-          <section class="panel">
-            <h2>◇ &nbsp; SHIP TELEMETRY</h2>
-            <div class="ship-id">
-              <div class="ship-icon">▲</div>
-              <div>
-                <strong id="ship-name">Wayfarer</strong
-                ><small id="ship-class">LIGHT EXPLORER</small>
-              </div>
-            </div>
-            <div class="meters">
-              <div>
-                <span>Shield integrity <b id="shield-value">100%</b></span
-                ><progress id="shield" max="100" value="100"></progress>
-              </div>
-              <div>
-                <span>Hull integrity <b id="hull-value">100%</b></span
-                ><progress id="hull" max="100" value="100"></progress>
-              </div>
-              <div>
-                <span>Heat load <b id="heat-value">0%</b></span
-                ><progress id="heat" max="100" value="0"></progress>
-              </div>
-            </div>
-            <div class="cargo">
-              <span>Cargo hold</span><b id="cargo">0 / 20</b>
-            </div>
-          </section>
-          <section class="panel objective">
-            <h2>◎ &nbsp; ACTIVE OBJECTIVE</h2>
-            <div class="objective-content">
-              <small id="quest-type">FLIGHT DIRECTIVE</small
-              ><strong id="quest-title">Make port</strong>
-              <p id="quest-body">
-                Approach Meridian Outpost and press E to dock.
-              </p>
-              <button id="track">◈ &nbsp; Track destination</button>
-            </div>
-          </section>
-        </aside>
-      </div>
-    </main>
-    <footer>
-      <span><i></i> SYSTEMS NOMINAL</span
-      ><span>HEXSPACE <b>//</b> BUILD 01</span
-      ><span id="save-status">LOCAL SAVE READY</span>
-    </footer>
-    <script src="./vendor/phaser.min.js"></script>
-    <script src="./vendor/howler.min.js"></script>
+    </div>
     <script type="module" src="./src/main.js"></script>
   </body>
 </html>
