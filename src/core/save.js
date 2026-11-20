@@ -15,8 +15,10 @@ export const fresh = () => ({
   resolved: {},
   clock: 0,
   market: {},
+  influence: {},
   quest: null,
   hired: false,
+  wingOrder: "escort",
   docked: false,
   assist: true,
   hp: null,
@@ -39,6 +41,8 @@ export function restore(storage) {
       if (Number.isFinite(x[k])) d[k] = Math.max(-900, Math.min(900, x[k]));
     for (const k of ["docked", "assist", "hired"])
       if (typeof x[k] === "boolean") d[k] = x[k];
+    if (["escort", "focus", "hold"].includes(x.wingOrder))
+      d.wingOrder = x.wingOrder;
     if (Object.hasOwn(hulls, x.ship)) d.ship = x.ship;
     for (const k of Object.keys(starter))
       if (Object.hasOwn(modules, x.fit?.[k]) && modules[x.fit[k]][1] === k)
@@ -47,12 +51,12 @@ export function restore(storage) {
       if (
         Number.isSafeInteger(x.cargo?.[k]) &&
         x.cargo[k] >= 0 &&
-        x.cargo[k] <= 56
+        x.cargo[k] <= 80
       )
         d.cargo[k] = x.cargo[k];
     for (const k of ["owned", "visited"])
       if (Array.isArray(x[k])) d[k] = x[k].filter((v) => typeof v === "string");
-    for (const k of ["rep", "resolved", "market"])
+    for (const k of ["rep", "resolved", "market", "influence"])
       if (x[k] && typeof x[k] === "object" && !Array.isArray(x[k])) d[k] = x[k];
     if (
       ["ore", "raider", "meds"].includes(x.quest?.type) &&

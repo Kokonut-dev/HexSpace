@@ -721,3 +721,12 @@ footer b {
   background: currentColor;
   box-shadow: none;
 }
+#wing {
+  margin-bottom: 7px;
+}
+.dialogue-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}

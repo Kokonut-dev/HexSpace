@@ -1,5 +1,5 @@
 import { rng } from "../world/galaxy.js";
-import { rooms } from "../station/interior.js";
+
 const random = rng(73),
   dust = Array.from({ length: 180 }, () => [random(), random(), random()]);
 const cols = {
@@ -153,7 +153,7 @@ export function render(sc, a, t) {
           15 * z,
         );
       }
-    for (const r of rooms) {
+    for (const r of a.rooms) {
       if (r.id !== "exit") {
         g.fillStyle(r.color, 0.12).fillRect(
           X(r.x - 62),
@@ -180,7 +180,27 @@ export function render(sc, a, t) {
       }
       text(sc, r.id, r.name, X(r.x), Y(r.y - 12));
     }
+    // Offset each prop shadow away from the moving suit lamp. Layered
+    // low-opacity rings keep lighting visible in the Canvas fallback.
+    const lampX = X(a.avatar.x),
+      lampY = Y(a.avatar.y);
+    for (let level = 4; level > 0; level--)
+      g.fillStyle(0x72eddf, 0.022).fillCircle(lampX, lampY, level * 16 * z);
     for (const o of a.props) {
+      const dx = o.x - a.avatar.x,
+        dy = o.y - a.avatar.y;
+      const length = Math.hypot(dx, dy) || 1;
+      const sx = (dx / length) * 13,
+        sy = (dy / length) * 13;
+      g.fillStyle(0x030611, 0.56).fillPoints(
+        [
+          { x: X(o.x - 9), y: Y(o.y + 5) },
+          { x: X(o.x + 9), y: Y(o.y + 5) },
+          { x: X(o.x + 9 + sx), y: Y(o.y + 5 + sy) },
+          { x: X(o.x - 9 + sx), y: Y(o.y + 5 + sy) },
+        ],
+        true,
+      );
       g.fillStyle([0x605177, 0x3c6570, 0x6a584c][o.kind]).fillRect(
         X(o.x - 9),
         Y(o.y - 6),
@@ -193,6 +213,27 @@ export function render(sc, a, t) {
   }
   const X = (x) => Math.round(cx + (x - p.x) * z),
     Y = (y) => Math.round(cy + (y - p.y) * z);
+  if (a.cloud) {
+    const cloud = a.cloud;
+    for (let layer = 0; layer < 6; layer++)
+      g.fillStyle(0xa773e4, 0.043).fillCircle(
+        X(cloud.x),
+        Y(cloud.y),
+        (cloud.radius - layer * 11) * z,
+      );
+    g.lineStyle(1, 0xa773e4, 0.27).strokeCircle(
+      X(cloud.x),
+      Y(cloud.y),
+      cloud.radius * z,
+    );
+    text(
+      sc,
+      "nebula",
+      "ION NEBULA · COOLING REDUCED",
+      X(cloud.x),
+      Y(cloud.y + cloud.radius),
+    );
+  }
   for (const [u, v, m] of dust) {
     const x = (((u * w - p.x * (0.03 + m * 0.13)) % w) + w) % w,
       y = (((v * h - p.y * (0.03 + m * 0.13)) % h) + h) % h;
@@ -290,7 +331,36 @@ export function render(sc, a, t) {
       Y(b.y - b.vy * 0.024),
     );
   }
-  const scale = a.d.ship === "vanguard" ? 2.55 : 2.2;
+  if (a.d.hired && a.d.wingOrder !== "hold") {
+    const side = Math.sin(t * 0.002) * 5;
+    sprite(
+      sc,
+      "wingmate",
+      "ship",
+      cx - (42 + side) * z,
+      cy + 30 * z,
+      1.35 * z,
+      p.angle + Math.PI / 2,
+      0xc4ffa9,
+    );
+  }
+  const scale =
+    a.d.ship === "argosy" ? 3.15 : a.d.ship === "vanguard" ? 2.55 : 2.2;
+  if (a.d.ship === "argosy")
+    for (const sign of [-1, 1]) {
+      const ox = -Math.sin(p.angle) * 21 * z * sign,
+        oy = Math.cos(p.angle) * 21 * z * sign;
+      sprite(
+        sc,
+        "pod" + sign,
+        "ship",
+        cx + ox,
+        cy + oy,
+        1.24 * z,
+        p.angle + Math.PI / 2,
+        0xa5d9ff,
+      );
+    }
   g.fillStyle(0x56dcff, 0.08).fillCircle(cx, cy, 31 * z);
   g.lineStyle(1, 0x70f0e5, 0.34).strokeCircle(cx, cy, 33 * z);
   sprite(

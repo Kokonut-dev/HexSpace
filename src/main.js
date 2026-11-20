@@ -1,9 +1,20 @@
+import { installBloom } from "./core/lighting.js";
+import { renderDialogue } from "./ui/dialogue.js";
+import { regionalState } from "./world/universe.js";
+import { config } from "./config.js";
 import { Game } from "./core/game.js";
 import { setup, render } from "./core/render.js";
 import { toggleAudio } from "./core/audio.js";
-import { sector, distance, key } from "./world/galaxy.js";
+import { distance, key } from "./world/galaxy.js";
 import { stats, modules, hulls } from "./customization/modules.js";
-import { cargoCount, goods, price, trade, jobs } from "./systems/economy.js";
+import {
+  cargoCount,
+  goods,
+  price,
+  trade,
+  jobs,
+  offers,
+} from "./systems/economy.js";
 import { range } from "./systems/flight.js";
 const $ = (id) => document.getElementById(id),
   set = (id, value) => {
@@ -12,6 +23,7 @@ const $ = (id) => document.getElementById(id),
   };
 const log = [],
   keys = new Set();
+let dialogue = "welcome";
 let view = "flight",
   mapSelection,
   scene,
@@ -66,6 +78,7 @@ function row(parent, title, desc, ...buttons) {
 function open(next) {
   if (next === view && next !== "flight") next = "flight";
   view = next;
+  dialogue = "welcome";
   keys.clear();
   pointerFire = false;
   mapSelection = game.s;
@@ -126,7 +139,7 @@ function drawOverlay() {
     for (let q = -2; q <= 2; q++)
       for (let r = -2; r <= 2; r++) {
         if (distance({ q, r }) > 2) continue;
-        const s = sector(game.s.q + q, game.s.r + r),
+        const s = regionalState(d, game.s.q + q, game.s.r + r),
           x = 230 + q * 64 + r * 32,
           y = 160 + r * 54,
           g = document.createElementNS(ns, "g"),
@@ -171,7 +184,7 @@ function drawOverlay() {
     row(
       rows,
       s.name,
-      `${s.security} security · ${s.faction} · Resources ${s.richness}%`,
+      `${s.security} security · ${s.faction} · Resources ${s.richness}%${s.contested ? " · Contested" : ""}`,
       button(
         "Initiate jump",
         () => {
@@ -223,6 +236,15 @@ function drawOverlay() {
           () => game.purchaseHull(id),
           !d.docked || d.ship === id,
         ),
+        ...(h.price && d.owned.includes(id) && d.ship !== id
+          ? [
+              action(
+                `Sell · ${Math.floor(h.price * 0.6)} CR`,
+                () => game.sellHull(id),
+                !d.docked,
+              ),
+            ]
+          : []),
       );
     for (const [id, [name, slot, price, mass, draw, mods]] of Object.entries(
       modules,
@@ -294,25 +316,25 @@ function drawOverlay() {
       );
     }
   } else if (view === "cantina") {
-    para(
-      panel,
-      "Dispatch officer: “Distress beacons are common along the border. Keep a cool reactor and an exit vector.”",
-    );
-    const board = Object.keys(jobs),
-      rotation = (game.s.richness + d.clock) % board.length;
-    for (const type of [
-      ...board.slice(rotation),
-      ...board.slice(0, rotation),
-    ]) {
-      const [name, desc, amount] = jobs[type];
+    const choose = (next) => {
+      dialogue = next;
+      drawOverlay();
+    };
+    if (dialogue !== "board") {
+      renderDialogue(panel, game.s, d, dialogue, choose, button);
+      return;
+    }
+    panel.append(button("Back to conversation", () => choose("welcome")));
+    for (const offer of offers(d, game.s)) {
+      const { type, desc, reward } = offer;
       row(
         rows,
-        name,
-        `${desc} · ${amount} CR`,
+        jobs[type][0],
+        `${desc} · ${reward} CR`,
         action(
           d.quest?.type === type ? "Accepted" : "Accept",
           () => {
-            d.quest = { type, origin: key(game.s), done: false };
+            d.quest = offer;
             return "Contract accepted.";
           },
           !!d.quest,
@@ -340,8 +362,12 @@ function drawOverlay() {
       row(
         rows,
         name,
-        desc,
+        d.quest.desc ?? desc,
         action("Turn in", () => game.claim()),
+        action("Abandon", () => {
+          d.quest = null;
+          return "Contract abandoned.";
+        }),
       );
     } else
       para(panel, "No active contracts. Check the cantina for available work.");
@@ -350,6 +376,9 @@ function drawOverlay() {
 }
 let contactSignature = "";
 function hud() {
+  $("wing").hidden = !d.hired;
+  set("wing", `Wing: ${d.wingOrder}`);
+
   const s = game.s,
     objs = game.objects.filter((o) => !o.dead);
   set("location", s.name);
@@ -390,7 +419,7 @@ function hud() {
   set(
     "quest-body",
     q
-      ? jobs[q.type][1]
+      ? (q.desc ?? jobs[q.type][1])
       : d.docked
         ? "Walk to a service terminal and press E."
         : `Approach ${s.station} and press E to dock.`,
@@ -458,6 +487,15 @@ function hud() {
   c.fillStyle = "#ecffff";
   c.fillRect(98, 98, 4, 4);
 }
+function changeWingOrder() {
+  if (!d.hired) return;
+  const orders = ["escort", "focus", "hold"];
+  d.wingOrder = orders[(orders.indexOf(d.wingOrder) + 1) % orders.length];
+  $("wing").textContent = `Wing: ${d.wingOrder}`;
+  notify(`Wingmate order: ${d.wingOrder}.`);
+  save();
+}
+$("wing").onclick = changeWingOrder;
 function interact() {
   if (view !== "flight") return;
   const result = game.interact();
@@ -478,13 +516,24 @@ $("sound").onclick = () => {
   $("sound").setAttribute("aria-pressed", String(toggleAudio()));
 };
 $("track").onclick = () => {
+  const destination = d.quest?.destination;
+  if (destination && !d.quest.done && destination !== key(game.s)) {
+    open("map");
+    const [q, r] = destination.split(",").map(Number);
+    if (distance({ q, r }, game.s) <= 2) {
+      mapSelection = regionalState(d, q, r);
+      drawOverlay();
+    }
+    notify(`Contract destination: hex ${destination}.`);
+    return;
+  }
   game.target =
     d.quest?.type === "raider" &&
     !d.quest.done &&
     !game.objects.find((o) => o.id === "raider")?.dead
       ? "raider"
       : d.quest?.type === "ore" &&
-          d.cargo.ore < 3 &&
+          d.cargo.ore < (d.quest.quantity ?? 3) &&
           !game.objects.find((o) => o.id === "ore")?.dead
         ? "ore"
         : "station";
@@ -561,7 +610,11 @@ surface.onpointerup = surface.onpointercancel = () => {
   pointerFire = false;
 };
 new Phaser.Game({
-  type: Phaser.CANVAS,
+  type:
+    matchMedia("(pointer: coarse)").matches ||
+    new URLSearchParams(location.search).has("canvas")
+      ? Phaser.CANVAS
+      : Phaser.AUTO,
   parent: "game",
   transparent: true,
   pixelArt: true,
@@ -577,11 +630,12 @@ new Phaser.Game({
     create() {
       scene = this;
       setup(this);
+      installBloom(this, Phaser);
       render(this, game, 0);
     },
     update(t, ms) {
       if (view === "flight")
-        game.update(Math.min(0.034, ms / 1000), {
+        game.update(Math.min(config.maxFrameDelta, ms / 1000), {
           x: Number(keys.has("d")) - Number(keys.has("a")),
           y: Number(keys.has("s")) - Number(keys.has("w")),
           aim,
@@ -596,7 +650,7 @@ new Phaser.Game({
         set("toast", text);
       }
       if (t >= nextSave) {
-        nextSave = t + 6500;
+        nextSave = t + config.saveIntervalMs;
         save();
       }
     },

@@ -1,22 +1,18 @@
+import { createShipState, createPilot } from "../entities/player.js";
+import { regionalState, support, nebula } from "../world/universe.js";
+import { config } from "../config.js";
 import { fresh, restore, persist } from "./save.js";
-import { sector, points, key, distance } from "../world/galaxy.js";
+import { points, key, distance } from "../world/galaxy.js";
 import { hulls, modules, stats } from "../customization/modules.js";
 import { cargoCount, jobs } from "../systems/economy.js";
 import { clamp, range, thrust } from "../systems/flight.js";
-import { interior, rooms, walk } from "../station/interior.js";
+import { stationLayout, walk } from "../station/interior.js";
 import { cue } from "./audio.js";
 export class Game {
   constructor(notify) {
     this.notify = notify;
     this.d = restore();
-    this.p = {
-      x: this.d.x,
-      y: this.d.y,
-      vx: 0,
-      vy: 0,
-      angle: -Math.PI / 2,
-      heat: 0,
-    };
+    this.p = createShipState(this.d);
     this.fit = stats(this.d.fit, this.d.ship);
     if (this.fit.draw > this.fit.power) {
       this.d.fit = fresh().fit;
@@ -24,16 +20,19 @@ export class Game {
     }
     this.p.hp = Math.min(this.d.hp ?? this.fit.hull, this.fit.hull);
     this.p.shield = this.fit.shield;
-    this.avatar = { x: 0, y: 95 };
+    this.avatar = createPilot();
     this.target = "station";
     this.load();
   }
   load() {
-    this.s = sector(this.d.q, this.d.r);
+    this.refreshRegion();
+    this.cloud = nebula(this.s);
     this.objects = points(this.s);
     for (const o of this.objects)
       o.dead = !!this.d.resolved[`${key(this.s)}/${o.id}`];
-    this.props = interior(this.s.richness);
+    const layout = stationLayout(this.s);
+    this.rooms = layout.rooms;
+    this.props = layout.props;
     this.bullets = [];
     this.particles = [];
     this.shot = 0;
@@ -41,7 +40,14 @@ export class Game {
     this.lastHit = 0;
     this.trail = 0;
   }
+  refreshRegion() {
+    this.s = regionalState(this.d, this.d.q, this.d.r);
+  }
+  inNebula() {
+    return !!this.cloud && range(this.p, this.cloud) < this.cloud.radius;
+  }
   save() {
+    this.refreshRegion();
     Object.assign(this.d, {
       x: this.p.x,
       y: this.p.y,
@@ -50,7 +56,9 @@ export class Game {
     return persist(this.d);
   }
   nearest() {
-    return rooms.find((r) => range(r, this.avatar) < 46);
+    return this.rooms.find(
+      (r) => range(r, this.avatar) < config.stationInteractionRange,
+    );
   }
   prompt() {
     if (this.d.docked) {
@@ -58,7 +66,10 @@ export class Game {
       return r ? `[E] ${r.id === "exit" ? "Undock" : r.name}` : "";
     }
     const o = this.objects.find(
-      (o) => !o.dead && o.type !== "raider" && range(o, this.p) < 65,
+      (o) =>
+        !o.dead &&
+        o.type !== "raider" &&
+        range(o, this.p) < config.interactionRange,
     );
     return o
       ? `[E] ${o.type === "station" ? "Dock at " + o.name : o.type === "ore" ? "Mine ferrite" : o.type === "wreck" ? "Salvage wreck" : "Scan signal"}`
@@ -91,12 +102,15 @@ export class Game {
       return;
     }
     const o = this.objects.find(
-      (o) => !o.dead && o.type !== "raider" && range(o, this.p) < 65,
+      (o) =>
+        !o.dead &&
+        o.type !== "raider" &&
+        range(o, this.p) < config.interactionRange,
     );
     if (!o) return this.notify("No contact in interaction range.");
     if (o.type === "station") {
       this.d.docked = true;
-      this.avatar = { x: 0, y: 97 };
+      this.avatar = createPilot();
       this.p.x = o.x;
       this.p.y = o.y;
       this.p.heat = 0;
@@ -173,16 +187,21 @@ export class Game {
   claim() {
     const q = this.d.quest;
     if (!q) return "No contract to turn in.";
-    const required = q.type === "ore" ? 3 : q.type === "meds" ? 2 : 0;
+    const required =
+      q.quantity ?? (q.type === "ore" ? 3 : q.type === "meds" ? 2 : 0);
     if (
       (required &&
         (this.d.cargo[q.type] < required ||
-          (q.type === "meds" && q.origin === key(this.s)))) ||
+          (q.type === "meds" &&
+            (q.destination
+              ? q.destination !== key(this.s)
+              : q.origin === key(this.s))))) ||
       (!required && !q.done)
     )
       return "Contract requirements not met.";
     if (required) this.d.cargo[q.type] -= required;
-    this.d.credits += jobs[q.type][2];
+    this.d.credits += q.reward ?? jobs[q.type][2];
+    support(this.d, this.s, this.s.faction, 4);
     this.d.rep[this.s.faction] = (Number(this.d.rep[this.s.faction]) || 0) + 5;
     this.d.quest = null;
     this.d.clock++;
@@ -235,10 +254,18 @@ export class Game {
     this.shot -= dt;
     this.enemyShot -= dt;
     this.lastHit += dt;
-    p.heat = clamp(p.heat - this.fit.cooling * dt, 0, 100);
+    p.heat = clamp(
+      p.heat -
+        this.fit.cooling *
+          dt *
+          (this.inNebula() ? config.nebulaCoolingMultiplier : 1),
+      0,
+      100,
+    );
     if (this.lastHit > 3)
       p.shield = Math.min(this.fit.shield, p.shield + dt * 11);
     if (fire && this.shot <= 0 && p.heat + this.fit.heat <= 100) {
+      const weapon = this.d.fit.weapon;
       const a = p.angle,
         c = Math.cos(a),
         s = Math.sin(a);
@@ -249,7 +276,7 @@ export class Game {
         vy: s * 445,
         life: 1.1,
       });
-      this.shot = 0.27;
+      this.shot = { laser: 0.19, plasma: 0.48, mining: 0.23 }[weapon] ?? 0.27;
       p.heat += this.fit.heat;
       cue("shot");
     }
@@ -272,8 +299,13 @@ export class Game {
           enemy: true,
         });
         this.enemyShot = 1.65;
-        if (this.d.hired && r < 190) {
-          o.hp -= 9;
+        if (
+          this.d.hired &&
+          this.d.wingOrder !== "hold" &&
+          r < 190 &&
+          (this.d.wingOrder !== "focus" || this.target === o.id)
+        ) {
+          o.hp -= this.d.wingOrder === "focus" ? 15 : 9;
           if (o.hp <= 0) this.destroy(o);
         }
       }
@@ -337,10 +369,35 @@ export class Game {
     } else {
       this.d.credits += 120;
       this.loot("scrap", 2);
-      if (this.d.quest?.type === "raider") this.d.quest.done = true;
+      const contract = this.d.quest;
+      if (
+        contract?.type === "raider" &&
+        (!contract.destination || contract.destination === key(this.s))
+      )
+        contract.done = true;
+      support(
+        this.d,
+        this.s,
+        this.s.faction === "Free Corsairs" ? "United Systems" : this.s.faction,
+        2,
+      );
       this.notify("Raider eliminated. Bounty: 120 CR.");
     }
     this.save();
+  }
+  sellHull(id) {
+    if (
+      !this.d.docked ||
+      this.d.ship === id ||
+      !hulls[id]?.price ||
+      !this.d.owned.includes(id)
+    )
+      return "Only inactive purchased hulls can be sold.";
+    this.d.owned = this.d.owned.filter((item) => item !== id);
+    const payout = Math.floor(hulls[id].price * 0.6);
+    this.d.credits += payout;
+    this.save();
+    return `${hulls[id].name} sold for ${payout} CR.`;
   }
   purchaseHull(id) {
     const h = hulls[id];
