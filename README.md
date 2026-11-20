@@ -8,12 +8,15 @@ Run `npm start` (Python 3 required) and visit `http://localhost:8000`. No packag
 
 | Input                      | Action                                     |
 | -------------------------- | ------------------------------------------ |
-| WASD or arrow keys         | Thrust or walk                             |
-| Mouse                      | Aim                                        |
-| Space or left mouse button | Fire                                       |
-| E                          | Interact with a nearby contact or terminal |
-| M                          | Galaxy chart                               |
-| Escape                     | Close overlay                              |
+| W / Up, S / Down           | Thrust forward / reverse along the nose     |
+| A / Left, D / Right        | Strafe relative to the ship                 |
+| Mouse                      | Aim; the nose turns toward the pointer      |
+| Shift                      | Afterburner                                 |
+| Q or X                     | Brake                                       |
+| Space or left mouse button | Fire                                        |
+| E or left click (station)  | Interact with the nearest terminal          |
+| M                          | Galaxy chart                                |
+| Escape                     | Close overlay                               |
 
 On touch devices, use the direction buttons, tap the viewport to aim, then hold Fire. Select the music button to enable sound. Flight assist brakes the ship when you release thrust; disable it to coast. Dock before fitting equipment and undock before jumping. The airlock is at the bottom of the station. Progress autosaves in browser-local storage; saves do not sync across devices or origins.
 

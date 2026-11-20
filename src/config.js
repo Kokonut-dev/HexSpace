@@ -12,6 +12,7 @@ export const GAME = {
   saveKey: "hexspace:save:v2",
   legacySaveKey: "hexspace:save:v1",
   framebufferHeight: 270,
+  framebufferDensity: 2,
   framebufferWidthMin: 400,
   framebufferWidthMax: 760,
   tick: 1 / 60,

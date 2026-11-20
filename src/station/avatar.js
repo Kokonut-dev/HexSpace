@@ -46,7 +46,7 @@ export function stepAvatar(avatar, interior, input, dt) {
 }
 
 /** Nearest interactable within reach, sorted by distance. */
-export function probe(avatar, interior, reach = 34) {
+export function probe(avatar, interior, reach = 48) {
   let best = null;
   let bestD = reach;
   for (const it of interactablesIn(interior)) {

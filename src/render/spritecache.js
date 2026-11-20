@@ -36,12 +36,12 @@ export class Art {
   }
 
   init() {
-    for (const id of Object.keys(HULLS)) this.ships[id] = bakeShip(id, HULLS[id].starter);
+    for (const id of Object.keys(HULLS)) this.ships[id] = bakeShip(id, HULLS[id].starter, { scale: 4 });
     for (const id of Object.keys(ENEMIES)) {
       const def = ENEMIES[id];
       const hull = HULLS[def.art] ?? HULLS.sabre;
       this.enemyBaked[id] = bakeShip(hull.id, hull.starter, {
-        scale: 2,
+        scale: 4,
         tones: def.friendly
           ? undefined
           : {
@@ -69,7 +69,7 @@ export class Art {
     const key = `${hullId}|${Object.entries(fit).sort().map(([k, v]) => `${k}:${v}`).join(",")}`;
     if (key !== this.playerKey) {
       this.playerKey = key;
-      this.playerBaked = bakeShip(hullId, fit, { scale: 2 });
+      this.playerBaked = bakeShip(hullId, fit, { scale: 4 });
       this.playerKey = key;
     }
     return this.playerBaked;
@@ -121,7 +121,10 @@ function shade(hex, amount) {
 export function drawBaked(ctx, baked, angle, x, y) {
   if (!baked) return;
   const frame = baked.frames[headingIndex(angle)];
-  ctx.drawImage(frame, Math.round(x - frame.width / 2), Math.round(y - frame.height / 2));
+  const drawScale = baked.drawScale ?? 1;
+  const width = frame.width / drawScale;
+  const height = frame.height / drawScale;
+  ctx.drawImage(frame, Math.round(x - width / 2), Math.round(y - height / 2), width, height);
 }
 
 export function shipHeading(angle) {

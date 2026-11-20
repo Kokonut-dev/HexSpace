@@ -49,7 +49,7 @@ export class AudioEngine {
         this.compressor.attack.value = 0.003;
         this.compressor.release.value = 0.25;
         this.master = this.ctx.createGain();
-        this.master.gain.value = (settings.volume ?? settings.masterVolume ?? 0.7) * 0.8;
+        this.master.gain.value = (settings.volume ?? settings.masterVolume ?? 0.7) * 0.24;
         this.compressor.connect(this.ctx.destination);
         this.master.connect(this.compressor);
       } catch (e) {
@@ -64,9 +64,7 @@ export class AudioEngine {
   setActive(v) {
     this.active = !!v;
     if (!this.active) {
-      if (this.engineNode) this.engineNode.stop();
-      this.engineNode = null;
-      this.engineGain = null;
+      this.stopEngine();
       this.stopPad();
       return;
     }
@@ -79,7 +77,7 @@ export class AudioEngine {
   }
 
   setVolume(v) {
-    if (this.master) this.master.gain.value = (v ?? 0.7) * 0.8;
+    if (this.master) this.master.gain.setTargetAtTime((v ?? 0.7) * 0.24, this.ctx.currentTime, 0.04);
   }
 
   // Generative pad/chords
@@ -123,36 +121,49 @@ export class AudioEngine {
     setTimeout(() => voices.forEach((voice) => voice.osc.stop()), 500);
   }
 
-  // Engine hum
+  // Low, filtered engine ambience; no sawtooth edge or abrupt gain steps.
   updateEngine({ moving, speed, boosting, active, brownout }) {
     if (!this.ctx || !this.active) return;
     this.brownout = brownout ?? 0;
     if (!active) {
-      if (this.engineNode) {
-        this.engineNode.stop();
-        this.engineNode = null;
-        this.engineGain = null;
-      }
+      this.stopEngine();
       return;
     }
     if (!this.engineNode) {
       this.engineNode = this.ctx.createOscillator();
+      this.engineFilter = this.ctx.createBiquadFilter();
       this.engineGain = this.ctx.createGain();
-      this.engineNode.type = "sawtooth";
-      this.engineNode.frequency.value = 50;
-      this.engineGain.gain.value = 0;
-      this.engineNode.connect(this.engineGain);
+      this.engineNode.type = "sine";
+      this.engineNode.frequency.value = 62;
+      this.engineFilter.type = "lowpass";
+      this.engineFilter.frequency.value = 260;
+      this.engineFilter.Q.value = 0.5;
+      this.engineGain.gain.value = 0.0001;
+      this.engineNode.connect(this.engineFilter);
+      this.engineFilter.connect(this.engineGain);
       this.engineGain.connect(this.master);
       this.engineNode.start();
     }
-    const baseFreq = 50 + (speed / 1000) * 150;
-    const boostFreq = boosting ? 40 : 0;
-    const brownoutFreq = this.brownout > 0 ? -20 * this.brownout : 0;
-    const targetFreq = baseFreq + boostFreq + brownoutFreq;
+    const baseFreq = 48 + (speed / 1000) * 72;
+    const boostFreq = boosting ? 18 : 0;
+    const targetFreq = Math.max(40, baseFreq + boostFreq - this.brownout * 8);
     const now = this.ctx.currentTime;
-    this.engineNode.frequency.exponentialRampToValueAtTime(targetFreq, now + 0.1);
-    const targetGain = moving ? 0.2 : 0.05;
-    this.engineGain.gain.exponentialRampToValueAtTime(targetGain, now + 0.1);
+    this.engineNode.frequency.setTargetAtTime(targetFreq, now, 0.12);
+    this.engineFilter.frequency.setTargetAtTime(boosting ? 420 : 260, now, 0.2);
+    const targetGain = moving ? 0.022 : 0.005;
+    this.engineGain.gain.setTargetAtTime(targetGain, now, 0.18);
+  }
+
+  stopEngine() {
+    if (!this.engineNode) return;
+    const node = this.engineNode;
+    const gain = this.engineGain;
+    this.engineNode = null;
+    this.engineGain = null;
+    this.engineFilter = null;
+    const now = this.ctx?.currentTime ?? 0;
+    gain?.gain.setTargetAtTime(0.0001, now, 0.035);
+    setTimeout(() => { try { node.stop(); } catch {} }, 140);
   }
 
   // Synthesized SFX
@@ -199,9 +210,10 @@ export class AudioEngine {
   // Synth helpers
   synthPulse(gain, now, dur, freq, vol) {
     const osc = this.ctx.createOscillator();
-    osc.type = "square";
+    osc.type = "triangle";
     osc.frequency.value = freq;
-    gain.gain.value = vol * (this.settings.sfxVolume ?? 0.8);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.linearRampToValueAtTime(vol * (this.settings.sfxVolume ?? 0.8) * 0.14, now + 0.008);
     osc.connect(gain);
     osc.start(now);
     osc.stop(now + dur);
@@ -214,9 +226,14 @@ export class AudioEngine {
     const data = buffer.getChannelData(0);
     for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
     const source = this.ctx.createBufferSource();
+    const filter = this.ctx.createBiquadFilter();
     source.buffer = buffer;
-    gain.gain.value = vol * (this.settings.sfxVolume ?? 0.8);
-    source.connect(gain);
+    filter.type = "lowpass";
+    filter.frequency.value = 1500;
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.linearRampToValueAtTime(vol * (this.settings.sfxVolume ?? 0.8) * 0.10, now + 0.012);
+    source.connect(filter);
+    filter.connect(gain);
     source.start(now);
     source.stop(now + dur);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
@@ -227,7 +244,8 @@ export class AudioEngine {
     osc.type = "sine";
     osc.frequency.value = start;
     osc.frequency.exponentialRampToValueAtTime(end, now + dur);
-    gain.gain.value = 0.4 * (this.settings.sfxVolume ?? 0.8);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.linearRampToValueAtTime(0.08 * (this.settings.sfxVolume ?? 0.8), now + 0.015);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
     osc.connect(gain);
     osc.start(now);

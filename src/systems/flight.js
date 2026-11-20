@@ -26,42 +26,55 @@ import {
  * @param {Object} world - world state
  */
 export function stepPlayer(player, fit, input, dt, world) {
-  const thrust = fit.stats?.thrust || 190;
-  const turn = fit.stats?.turn || 3.4;
-  const mass = fit.mass || 18;
-  
-  // Assist logic
-  const assist = input.assist;
-  const brake = input.brake || (assist && input.x === 0 && input.y === 0);
-  
-  // Acceleration
-  const ax = (input.x || 0) * thrust * dt;
-  const ay = (input.y || 0) * thrust * dt;
-  
-  // Apply brake
-  const brakeFactor = brake ? 0.8 : 1.0;
-  player.vx = (player.vx || 0) * brakeFactor + ax;
-  player.vy = (player.vy || 0) * brakeFactor + ay;
-  
-  // Position
-  player.x += player.vx * dt;
-  player.y += player.vy * dt;
-  
-  // Rotation/Heading
+  const thrust = fit.thrust || 190;
+  const turnRate = fit.turn || 3.4;
+  const assist = input.assist !== false;
+  const thrustX = input.x || 0;
+  const thrustY = input.y || 0;
+  const hasThrust = Math.hypot(thrustX, thrustY) > 0.001;
+  const boosting = !!input.boost && !input.brake && hasThrust;
+  player.moving = hasThrust;
+  player.boosting = boosting;
+  player.drift = !assist;
+  player.thrustInput = hasThrust ? 1 : 0;
+
+  // Mouse aim rotates the nose with the shortest angular path. Carry the aim
+  // through the world tick so this is driven by live pointer movement.
   if (input.aim && (input.aim.x !== 0 || input.aim.y !== 0)) {
     const targetAngle = Math.atan2(input.aim.y, input.aim.x);
-    const diff = targetAngle - player.angle;
-    const maxTurn = turn * dt;
+    const diff = ((targetAngle - player.angle + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+    const maxTurn = turnRate * dt;
     player.angle += Math.max(-maxTurn, Math.min(maxTurn, diff));
+    player.angle = ((player.angle + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
   }
-  
-  // Boost
-  if (input.boost && fit.stats?.boost) {
-    player.vx *= 1.5;
-    player.vy *= 1.5;
+
+  // W/S thrust follows the ship's nose; A/D strafe relative to the hull. This
+  // keeps visual heading, aiming and acceleration in the same coordinate frame.
+  const forward = -thrustY;
+  const right = thrustX;
+  const fx = Math.cos(player.angle);
+  const fy = Math.sin(player.angle);
+  const rx = Math.cos(player.angle + Math.PI / 2);
+  const ry = Math.sin(player.angle + Math.PI / 2);
+  const thrustScale = boosting ? 1.65 : 1;
+  const ax = (fx * forward + rx * right) * thrust * thrustScale;
+  const ay = (fy * forward + ry * right) * thrust * thrustScale;
+
+  const braking = !!input.brake || (assist && !hasThrust);
+  const damping = braking ? Math.exp(-(input.brake ? 9 : 5) * dt) : 1;
+  player.vx = (player.vx || 0) * damping + ax * dt;
+  player.vy = (player.vy || 0) * damping + ay * dt;
+
+  // Keep velocity bounded while preserving the extra boost envelope.
+  const speed = Math.hypot(player.vx, player.vy);
+  const speedCap = Math.max(120, (fit.speedCap || 520) * (boosting ? 1.18 : 1));
+  if (speed > speedCap) {
+    player.vx *= speedCap / speed;
+    player.vy *= speedCap / speed;
   }
-  
-  // Apply bounds
+
+  player.x += player.vx * dt;
+  player.y += player.vy * dt;
   applyBounds(player, world);
 }
 

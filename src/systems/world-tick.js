@@ -24,7 +24,7 @@ export function tickWorld(world, dt, input, effects) {
   stepPlayer(
     world.player,
     world.stats,
-    { x: input.x, y: input.y, boost: input.boost, brake: input.brake },
+    { x: input.x, y: input.y, boost: input.boost, brake: input.brake, aim: input.aim, assist: input.assist },
     dt,
     { aimAngle: world.aimAngle, assist: input.assist !== false, time: world.time },
   );

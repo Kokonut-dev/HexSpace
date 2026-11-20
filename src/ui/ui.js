@@ -220,10 +220,8 @@ export class UI {
       b.addEventListener("pointerleave", release);
     }
 
-    // Canvas pointer: aim + primary fire handled in Input; this just closes modals.
-    if (this.els.canvas) this.els.canvas.addEventListener("pointerdown", () => {
-      if (g.screen) g.closeScreen();
-    });
+    // Pointer events on the viewport are handled by Input and then dispatched
+    // through Game so modal-close and station interaction remain ordered.
   }
 
   /* ── Title ──────────────────────────────────────────────────────────── */

@@ -309,7 +309,7 @@ export class Game {
       return;
     }
     if (this.mode === "station") {
-      const target = probe(this.avatar, this.interior, 36);
+      const target = probe(this.avatar, this.interior, 48);
       if (!target) {
         this.toastMessage("Nothing within reach.", "info");
         return;
@@ -1087,7 +1087,7 @@ export class Game {
     stepAvatar(this.avatar, this.interior, input, dt);
     stepNpcs(this.interior, dt);
     this.frame.follow(this.avatar.x, this.avatar.y - 20);
-    this.stationTarget = probe(this.avatar, this.interior, 36);
+    this.stationTarget = probe(this.avatar, this.interior, 48);
     const room = roomUnder(this.interior, this.avatar.x, this.avatar.y);
     this.currentRoom = room;
     audio.updateEngine({ moving: false, speed: 0, boosting: false, active: false });
@@ -1126,7 +1126,8 @@ export class Game {
         if (this.mode === "flight") this.consume(ev.id);
         break;
       case "pointerDown":
-        if (this.mode === "flight" && this.screen) this.closeScreen();
+        if (this.screen) this.closeScreen();
+        else if (this.mode === "station" && ev.button === 0) this.interact();
         break;
       case "cancel":
         cancelInteract(this.world);
