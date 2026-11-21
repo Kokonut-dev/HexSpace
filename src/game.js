@@ -328,6 +328,30 @@ export class Game {
     }
   }
 
+  /** Turn a deliberate click on the station sprite into a dock action. */
+  interactAtPointer(ev) {
+    const station = this.world?.station;
+    if (!station || !Number.isFinite(ev.x) || !Number.isFinite(ev.y)) return false;
+    const frame = this.frame;
+    const rect = frame.canvas?.getBoundingClientRect?.();
+    const scale = frame.scale || 1;
+    const x = rect
+      ? (ev.x * rect.width - (frame.offsetX || 0)) / scale
+      : ev.x * frame.width;
+    const y = rect ? (ev.y * rect.height) / scale : ev.y * frame.height;
+    const point = frame.worldToScreen(station.x, station.y);
+    const stationArt = this.art.stations?.[station.station.economy];
+    const hitRadius = Math.max(34, (stationArt?.size ?? 260) / 2);
+    if (Math.hypot(x - point.x, y - point.y) > hitRadius) return false;
+
+    if (this.world.interact?.entity === station && this.world.interact.action === "dock") {
+      this.interact();
+    } else {
+      this.toastMessage("Move closer to the station to dock.", "info");
+    }
+    return true;
+  }
+
   consume(id) {
     if ((this.state.consumables[id] ?? 0) <= 0) {
       this.toastMessage("None left.", "warn");
@@ -899,9 +923,9 @@ export class Game {
     this.state.heat = world.player.heat;
     this.state.missiles = this.state.missiles ?? 0;
 
-    // Ship-kill and pickup events.
+    // Combat events are handled first; leave the queue intact until interaction
+    // and mission events have also been drained below.
     for (const ev of world.events) this.handleCombatEvent(ev);
-    if (world.events.length) world.events.length = 0;
 
     // Interaction results produced by the hold mechanic.
     this.drainWorldEvents();
@@ -1128,6 +1152,7 @@ export class Game {
       case "pointerDown":
         if (this.screen) this.closeScreen();
         else if (this.mode === "station" && ev.button === 0) this.interact();
+        else if (this.mode === "flight" && ev.button === 0) this.interactAtPointer(ev);
         break;
       case "cancel":
         cancelInteract(this.world);

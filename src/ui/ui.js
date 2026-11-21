@@ -1198,6 +1198,7 @@ const SCREENS = {
           h("h4", null, "FLIGHT"),
           kv([
             ["Aim", "Mouse · ship follows"],
+            ["Dock", "Click station when in range"],
             ["Thrust", "W A S D / arrows"],
             ["Afterburner", "Shift (burns heat)"],
             ["Brake", "Q or X"],

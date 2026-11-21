@@ -14,7 +14,7 @@ Run `npm start` (Python 3 required) and visit `http://localhost:8000`. No packag
 | Shift                      | Afterburner                                 |
 | Q or X                     | Brake                                       |
 | Space or left mouse button | Fire                                        |
-| E or left click (station)  | Interact with the nearest terminal          |
+| E or left click            | Use the nearest terminal; click a nearby station to dock |
 | M                          | Galaxy chart                                |
 | Escape                     | Close overlay                               |
 
