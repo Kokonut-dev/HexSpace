@@ -1,9 +1,9 @@
 /**
  * Pixel framebuffer.
  *
- * World and UI geometry use a stable 270px logical height, rasterized into a
- * 2x backing canvas before being blitted to the display. The logical pixel grid
- * stays consistent while fine details and diagonal edges retain more clarity.
+ * World and UI geometry use a stable logical coordinate system, rasterized at
+ * near display-pixel density before being blitted to the visible canvas. This
+ * preserves layout while avoiding the large blocks of a fixed 270p output.
  */
 import { GAME } from "../config.js";
 
@@ -38,10 +38,16 @@ export class PixelFrame {
         Math.min(GAME.framebufferWidthMax, this.height * aspect),
       ),
     );
-    this.buffer.width = this.width * this.pixelRatio;
-    this.buffer.height = this.height * this.pixelRatio;
-    this.bctx.imageSmoothingEnabled = false;
     this.scale = cssH / this.height;
+    // Match the backing resolution to display pixels (up to 4x logical). The
+    // previous fixed 270p raster expanded each logical pixel into a large block.
+    this.pixelRatio = Math.max(
+      GAME.framebufferDensity ?? 2,
+      Math.min(4, this.scale * dpr),
+    );
+    this.buffer.width = Math.ceil(this.width * this.pixelRatio);
+    this.buffer.height = Math.ceil(this.height * this.pixelRatio);
+    this.bctx.imageSmoothingEnabled = false;
     this.ctx.imageSmoothingEnabled = false;
     // Browsers round canvas blits; keep the letterbox integer to avoid seams.
     this.offsetX = (cssW - this.width * this.scale) / 2;
@@ -86,7 +92,7 @@ export class PixelFrame {
     c.fillRect(0, 0, this.canvas.width, this.canvas.height);
     c.drawImage(
       this.buffer,
-      0, 0, this.buffer.width, this.buffer.height,
+      0, 0, this.width * this.pixelRatio, this.height * this.pixelRatio,
       Math.round(this.offsetX * this.dpr),
       0,
       Math.round(this.width * this.scale * this.dpr),

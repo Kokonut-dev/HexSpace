@@ -7,6 +7,7 @@ import { shipStats, slotLayout, canInstall, installModule, stationPrice, hullPri
 import { priceAt, buy, sell, cargoUsed, cargoFree, cargoValue, tradeHint, marketFor, refuelQuote, applyRefuel, goodStatusFor } from "../src/systems/economy.js";
 import { stepPlayer, applyBounds } from "../src/systems/flight.js";
 import { tickWorld } from "../src/systems/world-tick.js";
+import { PixelFrame } from "../src/render/frame.js";
 import { buildWorld } from "../src/world/sector.js";
 import { buildInterior, canWalk } from "../src/station/layout.js";
 import { createAvatar, stepAvatar } from "../src/station/avatar.js";
@@ -132,6 +133,28 @@ test("simulation tick and flight physics (assist vs unassisted)", () => {
   assert.ok(true, "World tick should progress state without crashing");
 });
 
+test("pixel framebuffer raster tracks the display instead of remaining 270p", () => {
+  const originalCreateElement = global.document.createElement;
+  const originalDpr = global.window.devicePixelRatio;
+  const context = { setTransform() {}, imageSmoothingEnabled: false };
+  try {
+    global.window.devicePixelRatio = 1;
+    global.document.createElement = () => ({ width: 0, height: 0, getContext: () => context });
+    const canvas = {
+      width: 0, height: 0,
+      getContext: () => context,
+      getBoundingClientRect: () => ({ width: 1568, height: 824 }),
+    };
+    const frame = new PixelFrame(canvas);
+    assert.equal(frame.buffer.height, 824);
+    assert.ok(frame.pixelRatio > 3, "backing density should match a desktop-height viewport");
+  } finally {
+    global.document.createElement = originalCreateElement;
+    if (originalDpr === undefined) delete global.window.devicePixelRatio;
+    else global.window.devicePixelRatio = originalDpr;
+  }
+});
+
 test("flight aiming rotates the ship and forward thrust follows its heading", () => {
   const state = freshGame(422);
   const fit = shipStats(state.hull, state.fit);
@@ -142,6 +165,30 @@ test("flight aiming rotates the ship and forward thrust follows its heading", ()
   assert.ok(player.angle > -Math.PI / 2, "mouse aim should rotate the nose toward the cursor");
   assert.ok(player.vy < 0, "forward thrust should initially move along the ship's nose");
   assert.ok(Math.abs(player.vx) < Math.abs(player.vy), "short thrust should not move sideways while the ship turns");
+});
+
+test("clicking an in-range station docks without stopping the game loop", () => {
+  const frame = {
+    ...mockFrame,
+    width: 480, height: 270, scale: 2, offsetX: 0,
+    canvas: { getBoundingClientRect: () => ({ width: 960, height: 540 }) },
+    worldToScreen: () => ({ x: 240, y: 135 }),
+  };
+  const game = new Game({ ui: mockUI, frame, input: mockInput, art: mockArt, render: mockRender });
+  game.state = freshGame(7741);
+  game.syncStats();
+  game.beginCampaign(false);
+  game.world.player.x = game.world.station.x;
+  game.world.player.y = game.world.station.y;
+  game.stepFlight(1 / 60);
+  assert.equal(game.world.interact?.action, "dock");
+  game.handleInputEvent({ type: "pointerDown", button: 0, x: 0.5, y: 0.5 });
+  game.update(1 / 60);
+  assert.equal(game.mode, "station");
+  assert.equal(game.state.docked, true);
+  assert.ok(game.interior, "station interior should be created");
+  game.update(1 / 60);
+  assert.doesNotThrow(() => game.render(1 / 60), "station mode should keep updating and rendering");
 });
 
 test("docking, fitting capacity, and contract/mission payout", () => {

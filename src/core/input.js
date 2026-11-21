@@ -122,7 +122,7 @@ export class Input {
     this.pointer.active = true;
     if (e.button === 2) this.pointer.secondaryDown = true;
     else this.pointer.down = true;
-    this.events.push({ type: "pointerDown", button: e.button });
+    this.events.push({ type: "pointerDown", button: e.button, x: this.pointer.x, y: this.pointer.y });
   }
 
   onPointerMove(e) {
